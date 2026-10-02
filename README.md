@@ -28,7 +28,7 @@ normal windows, and its keys and behaviour go away.
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
 | `Super + Ctrl + Alt + A` | Reset the agent sidebar to its docked spot and size |
-| `Escape` | Hide the agent sidebar while it has focus (use `Ctrl + C` to stop Claude mid-answer) |
+| `Escape` | Hide any sidebar while it has focus (in the agent sidebar, use `Ctrl + C` to stop Claude mid-answer) |
 
 Inside any sidebar:
 
@@ -41,6 +41,10 @@ Inside any sidebar:
 
 There is one generic sidebar at a time: converting a second window sends the
 first back to your workspace. The agent sidebar has its own slot.
+
+While a sidebar has focus, `Escape` hides it instead of reaching the app (a
+browser's find bar or fullscreen video, for example). Turn that off per slot in
+the config below.
 
 **Note:** the plugin re-binds `Super + Shift + A` (Omarchy's ChatGPT key) and
 wraps Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and swap
@@ -57,7 +61,7 @@ return {
   width = 0.4,               -- default width as a share of the screen
   margin = 16,               -- gap to screen edges and the bar
   dim = false,               -- don't dim behind sidebars
-  sidebar = { escape = true }, -- Escape also hides the generic sidebar
+  sidebar = { escape = false }, -- let Escape reach the app in the sidebar
   agent = {
     toggle = "SUPER + C",    -- any key can be changed, or set to false
     new = false,             -- keep Omarchy's ChatGPT key

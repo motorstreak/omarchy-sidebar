@@ -75,7 +75,7 @@ local defaults = {
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
-    escape = false, -- ESCAPE hides it; off since many apps use ESCAPE
+    escape = true, -- ESCAPE hides it (the app in it then doesn't get ESCAPE)
   },
   agent = {
     enabled = true,
