@@ -376,51 +376,6 @@ local function set_dim(window, on)
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "dim_around", value = on and "1" or "0" })
 end
 
--- Sends a window that is in the sidebar workspace back to the regular workspace
--- on its monitor; the move event then turns it into a normal window.
-local function evict(window)
-  local regular = regular_workspace(window.monitor)
-  if regular then
-    dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name), follow = false })
-  end
-end
-
-local function enter(window)
-  -- Only one sidebar: anything else in it goes back to the workspace.
-  for _, other in ipairs(sidebar_windows()) do
-    if other.address ~= window.address then
-      evict(other)
-    end
-  end
-
-  if members[window.address] == nil then
-    was_floating[window.address] = window.floating == true
-  end
-  members[window.address] = true
-  if window.pinned then
-    dispatch_for(window, hl.dsp.window.pin, {})
-  end
-  if window.fullscreen and window.fullscreen ~= 0 then
-    dispatch_for(window, hl.dsp.window.fullscreen, { mode = window.fullscreen == 1 and "maximized" or "fullscreen" })
-  end
-  if not window.floating then
-    dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
-  end
-  set_dim(window, config.dim)
-
-  -- Dock once floating has settled, or Hyprland restores the window's old
-  -- floating position over ours; by then it may have closed or moved on.
-  local address = window.address
-  hl.timer(guard("docking", function()
-    local now = current(address)
-    if now and members[address] and now.floating and in_sidebar(now) then
-      dock_default(now)
-    end
-    sync_keys()
-  end), { timeout = 50, type = "oneshot" })
-  sync_keys()
-end
-
 -- Hides the sidebar if it is on screen and `leaving` was the last window in it.
 local function hide_if_empty(leaving)
   for _, w in ipairs(sidebar_windows()) do
@@ -447,6 +402,60 @@ local function leave(window)
   elseif window.floating then
     dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
   end
+  sync_keys()
+end
+
+-- Sends a window in the sidebar workspace back to the regular workspace on its
+-- monitor as a normal window. Leaving is done here rather than left to the move
+-- event: Hyprland doesn't deliver events caused from inside another event's
+-- handler, which is where a replaced sidebar is usually evicted from.
+local function evict(window)
+  local regular = regular_workspace(window.monitor)
+  if regular then
+    dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name), follow = false })
+  end
+  if members[window.address] then
+    leave(window)
+  else
+    set_dim(window, false)
+  end
+end
+
+-- `opened` is true for a window that opened straight into the sidebar (the
+-- agent): it has no earlier state, so it leaves as a normal tiled window.
+local function enter(window, opened)
+  -- Only one sidebar: anything else in it goes back to the workspace.
+  for _, other in ipairs(sidebar_windows()) do
+    if other.address ~= window.address then
+      evict(other)
+    end
+  end
+
+  if members[window.address] == nil then
+    was_floating[window.address] = not opened and window.floating == true
+  end
+  members[window.address] = true
+  if window.pinned then
+    dispatch_for(window, hl.dsp.window.pin, {})
+  end
+  if window.fullscreen and window.fullscreen ~= 0 then
+    dispatch_for(window, hl.dsp.window.fullscreen, { mode = window.fullscreen == 1 and "maximized" or "fullscreen" })
+  end
+  if not window.floating then
+    dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
+  end
+  set_dim(window, config.dim)
+
+  -- Dock once floating has settled, or Hyprland restores the window's old
+  -- floating position over ours; by then it may have closed or moved on.
+  local address = window.address
+  hl.timer(guard("docking", function()
+    local now = current(address)
+    if now and members[address] and now.floating and in_sidebar(now) then
+      dock_default(now)
+    end
+    sync_keys()
+  end), { timeout = 50, type = "oneshot" })
   sync_keys()
 end
 
@@ -671,7 +680,7 @@ hl.on("window.open", guard("opening a window", function(window)
     return
   end
   if is_agent(window) then
-    enter(window)
+    enter(window, true)
   else
     local regular = regular_workspace(window.monitor)
     if regular then
