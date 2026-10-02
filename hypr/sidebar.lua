@@ -10,8 +10,9 @@
 --            the sidebar (or the sidebar back into a normal window); SUPER + B
 --            shows/hides it. Converting another window returns the previous
 --            one to your workspace.
---   claude   a Claude Code sidebar with its own key and saved sessions
---            (see bin/claude-sidebar).
+--   agent    your Omarchy default coding agent (`omarchy default agent`) as a
+--            sidebar with its own key; with Claude Code it also keeps saved,
+--            searchable sessions (see bin/agent-sidebar).
 --
 -- In any sidebar, SUPER + SHIFT + LEFT/RIGHT docks it to that edge (remembered
 -- per slot) and Omarchy's resize keys resize it while keeping it docked.
@@ -38,9 +39,9 @@ local config = {
     convert = "SUPER + ALT + B",
     escape = false, -- ESCAPE hides it; off since many apps use ESCAPE
   },
-  claude = {
+  agent = {
     enabled = true,
-    class = "sidebar.claude",
+    class = "sidebar.agent",
     toggle = "SUPER + A",
     new = "SUPER + SHIFT + A",
     load = "SUPER + ALT + A",
@@ -70,8 +71,8 @@ end
 local slots = {
   sidebar = { name = "sidebar", workspace = "special:sidebar", escape = config.sidebar.escape },
 }
-if config.claude.enabled then
-  slots.claude = { name = "claude", workspace = "special:claude", escape = config.claude.escape, class = config.claude.class }
+if config.agent.enabled then
+  slots.agent = { name = "agent", workspace = "special:agent", escape = config.agent.escape, class = config.agent.class }
 end
 
 local function slot_for_workspace(name)
@@ -393,39 +394,39 @@ bind(config.sidebar.toggle, "Show/hide sidebar", function()
 end)
 bind(config.sidebar.convert, "Window to/from sidebar", convert)
 
-if slots.claude then
-  local script = dir .. "/bin/claude-sidebar"
+if slots.agent then
+  local script = dir .. "/bin/agent-sidebar"
   local function run(command)
-    hl.exec_cmd("SIDEBAR_CLAUDE_CLASS='" .. slots.claude.class .. "' '" .. script .. "' " .. command)
+    hl.exec_cmd("SIDEBAR_AGENT_CLASS='" .. slots.agent.class .. "' '" .. script .. "' " .. command)
   end
 
   hl.window_rule({
-    match = { class = "^" .. slots.claude.class:gsub("%.", "\\.") .. "$" },
+    match = { class = "^" .. slots.agent.class:gsub("%.", "\\.") .. "$" },
     float = true,
-    workspace = slots.claude.workspace,
+    workspace = slots.agent.workspace,
   })
 
-  -- A second press while Claude is still starting would launch a second Claude
-  -- on the same session; the script also guards this with a lock.
+  -- A second press while the agent is still starting would launch a second
+  -- one (on the same session, for Claude); the script also guards this.
   local launched_at = 0
-  slots.claude.launch = function()
+  slots.agent.launch = function()
     if os.time() - launched_at >= 5 then
       launched_at = os.time()
       run("launch")
     end
   end
-  bind(config.claude.toggle, "Claude sidebar", function()
-    toggle(slots.claude)
+  bind(config.agent.toggle, "Agent sidebar", function()
+    toggle(slots.agent)
   end)
-  bind(config.claude.new, "New Claude sidebar session", function()
+  bind(config.agent.new, "New agent sidebar session", function()
     run("new")
   end)
-  bind(config.claude.load, "Load Claude sidebar session", function()
+  bind(config.agent.load, "Load agent sidebar session", function()
     run("load")
   end)
-  bind(config.claude.reset, "Reset Claude sidebar", function()
-    if not reset(slots.claude) then
-      slots.claude.launch()
+  bind(config.agent.reset, "Reset agent sidebar", function()
+    if not reset(slots.agent) then
+      slots.agent.launch()
     end
   end)
 end
@@ -490,7 +491,7 @@ for _, r in ipairs({
   end)
 end
 
--- For testing and scripting: `hyprctl eval 'sidebar.toggle("claude")'` etc.
+-- For testing and scripting: `hyprctl eval 'sidebar.toggle("agent")'` etc.
 sidebar = {
   slots = slots,
   toggle = function(name)

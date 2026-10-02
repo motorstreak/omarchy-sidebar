@@ -1,23 +1,29 @@
 #!/bin/bash
-# Claude Code sessions for the Claude sidebar (run by hypr/sidebar.lua).
-#   claude-sidebar launch   open the sidebar on its current session
-#   claude-sidebar new      start a fresh session (SUPER + SHIFT + A)
-#   claude-sidebar load     pick an earlier sidebar session (SUPER + ALT + A)
-# The sidebar is pinned to one Claude session, so closing the window and
-# relaunching resumes the same conversation. New sessions are named with a
+# Launches the agent sidebar (run by hypr/sidebar.lua) with your Omarchy default
+# coding agent (`omarchy default agent`).
+#   agent-sidebar launch   open the sidebar
+#   agent-sidebar new      start a fresh session (SUPER + SHIFT + A)
+#   agent-sidebar load     pick an earlier session, Claude only (SUPER + ALT + A)
+#
+# Any agent runs through Omarchy's own launcher (`omarchy-agent --inline`), so it
+# starts exactly as SUPER + SHIFT + CTRL + A starts it. Claude Code is the
+# exception: that launcher can't pass session options, so Claude is run
+# directly to keep the sidebar pinned to one session (closing the window and
+# relaunching resumes the same conversation) and to name new sessions with a
 # timestamp so they can be found again here or in Claude's /resume picker.
 
-class=${SIDEBAR_CLAUDE_CLASS:-sidebar.claude}
-state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-sidebar/claude
+class=${SIDEBAR_AGENT_CLASS:-sidebar.agent}
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-sidebar/agent
+agent=$(omarchy-default-agent)
 
-# Claude keeps sessions per directory; run where Omarchy's own agent launcher
-# does, so the folder is trusted and sessions land in one place.
+# Agents keep sessions per directory; run where Omarchy's launcher does, so the
+# folder is trusted and sessions land in one place.
 work_dir=$HOME
 [[ -d $HOME/Work ]] && work_dir=$HOME/Work
 projects=$HOME/.claude/projects/$(sed 's|[/.]|-|g' <<<"$work_dir")
 
 # One instance at a time: a second run while the sidebar is still starting
-# would launch a second Claude on the same session.
+# would launch a second agent (on the same session, for Claude).
 mkdir -p "$state_dir"
 exec 9>"$state_dir/lock"
 flock -n 9 || exit 0
@@ -32,7 +38,7 @@ close_window() {
   window_open || return 0
   hyprctl dispatch "hl.dsp.window.close({ window = \"class:^${class//./\\\\.}\$\" })" >/dev/null
   for _ in {1..30}; do window_open || return 0; sleep 0.1; done
-  notify-send "Claude sidebar" "The sidebar didn't close; leaving it as is"
+  notify-send "Agent sidebar" "The sidebar didn't close; leaving it as is"
   return 1
 }
 
@@ -41,8 +47,8 @@ new_session() {
   date '+%Y-%m-%d %H:%M' >"$state_dir/session-name"
 }
 
-# Lists sidebar sessions (timestamp-named), newest first, as a searchable menu
-# and sets picked_id/picked_name. Returns 1 if nothing was picked.
+# Lists Claude sidebar sessions (timestamp-named), newest first, as a searchable
+# menu and sets picked_id/picked_name. Returns 1 if nothing was picked.
 pick_session() {
   local current f id title prompt key choice
   local -A ids=()
@@ -65,7 +71,7 @@ pick_session() {
   done < <(ls -t "$projects"/*.jsonl 2>/dev/null)
 
   if ((${#options[@]} == 0)); then
-    notify-send "Claude sidebar" "No saved sidebar sessions yet"
+    notify-send "Agent sidebar" "No saved sidebar sessions yet"
     return 1
   fi
 
@@ -75,6 +81,11 @@ pick_session() {
   picked_name=${choice%%$'\t'*}
 }
 
+if [[ -z $agent ]]; then
+  # Omarchy ships without a default; offer the choice instead of doing nothing.
+  exec omarchy-menu summon setup.default.agent
+fi
+
 case ${1:-launch} in
 launch)
   # The toggle key only launches when no sidebar exists; don't add a second.
@@ -82,12 +93,16 @@ launch)
   ;;
 new)
   close_window || exit 1
-  new_session
+  [[ $agent == claude ]] && new_session
   ;;
 load)
+  if [[ $agent != claude ]]; then
+    notify-send "Agent sidebar" "Saved sessions are only available with Claude Code"
+    exit 0
+  fi
   pick_session || exit 0
   if [[ $picked_id == "$(cat "$state_dir/session-id" 2>/dev/null)" ]] && window_open; then
-    hyprctl eval 'sidebar.show("claude")' >/dev/null
+    hyprctl eval 'sidebar.show("agent")' >/dev/null
     exit 0
   fi
   close_window || exit 1
@@ -95,25 +110,29 @@ load)
   echo "$picked_name" >"$state_dir/session-name"
   ;;
 *)
-  echo "Usage: claude-sidebar [launch|new|load]" >&2
+  echo "Usage: agent-sidebar [launch|new|load]" >&2
   exit 1
   ;;
 esac
 
-[[ -s $state_dir/session-id ]] || new_session
-session=$(<"$state_dir/session-id")
-name=$(cat "$state_dir/session-name" 2>/dev/null)
-[[ -n $name ]] || name=$(date '+%Y-%m-%d %H:%M')
-
 cd "$work_dir" || exit 1
 
-# A session with no messages has no transcript yet and can't be resumed.
-if [[ -f $projects/$session.jsonl ]]; then
-  args=(--resume "$session")
+if [[ $agent == claude ]]; then
+  [[ -s $state_dir/session-id ]] || new_session
+  session=$(<"$state_dir/session-id")
+  name=$(cat "$state_dir/session-name" 2>/dev/null)
+  [[ -n $name ]] || name=$(date '+%Y-%m-%d %H:%M')
+
+  # A session with no messages has no transcript yet and can't be resumed.
+  if [[ -f $projects/$session.jsonl ]]; then
+    command=(claude --resume "$session")
+  else
+    command=(claude --session-id "$session" --name "$name")
+  fi
 else
-  args=(--session-id "$session" --name "$name")
+  command=(omarchy-agent --inline)
 fi
 
 # Hold the lock until the window exists; the terminal mustn't inherit it.
-omarchy-launch-tui --app-id="$class" claude "${args[@]}" 9>&- &
+omarchy-launch-tui --app-id="$class" "${command[@]}" 9>&- &
 for _ in {1..50}; do window_open && break; sleep 0.1; done
