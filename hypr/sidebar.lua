@@ -28,6 +28,9 @@
 if SIDEBAR_LOADED then
   return
 end
+if SIDEBAR_DIR == nil then
+  error("set SIDEBAR_DIR to the plugin folder before loading sidebar.lua")
+end
 SIDEBAR_LOADED = true
 
 local dir = SIDEBAR_DIR
@@ -41,18 +44,19 @@ local quote = o.shell_quote
 
 -- Reporting --------------------------------------------------------------------
 
-local reported = {}
+local reported, reported_count = {}, 0
 
 local function notify(message)
-  hl.exec_cmd("notify-send -a Sidebar Sidebar " .. quote(message))
+  hl.exec_cmd("notify-send -a Sidebar -- Sidebar " .. quote(message))
 end
 
 -- Each distinct error is reported once per load, so a failing callback that
 -- fires on every focus change can't flood the screen.
 local function report(context, err)
   local message = context .. ": " .. tostring(err)
-  if not reported[message] then
+  if not reported[message] and reported_count < 20 then
     reported[message] = true
+    reported_count = reported_count + 1
     notify(message)
   end
 end
@@ -89,14 +93,42 @@ local defaults = {
   },
 }
 
+-- Keys that act on a sidebar differently from Omarchy are only taken over
+-- while a sidebar has focus; the rest of the time Omarchy's own bindings are in
+-- place untouched.
+--
+-- Omarchy's resize and swap keys (from default/hypr/bindings/tiling.lua),
+-- restored exactly as Omarchy binds them when a sidebar loses focus.
+local resize_keys = {
+  { "SUPER + code:20", "Expand window left", -100, 0 },
+  { "SUPER + code:21", "Shrink window left", 100, 0 },
+  { "SUPER + SHIFT + code:20", "Shrink window up", 0, -100 },
+  { "SUPER + SHIFT + code:21", "Expand window down", 0, 100 },
+  { "SUPER + ALT + code:20", "Expand window left a little", -25, 0 },
+  { "SUPER + ALT + code:21", "Shrink window left a little", 25, 0 },
+  { "SUPER + SHIFT + ALT + code:20", "Shrink window up a little", 0, -25 },
+  { "SUPER + SHIFT + ALT + code:21", "Expand window down a little", 0, 25 },
+  { "SUPER + CTRL + code:20", "Expand window left a lot", -300, 0 },
+  { "SUPER + CTRL + code:21", "Shrink window left a lot", 300, 0 },
+  { "SUPER + CTRL + SHIFT + code:20", "Shrink window up a lot", 0, -300 },
+  { "SUPER + CTRL + SHIFT + code:21", "Expand window down a lot", 0, 300 },
+}
+local swap_keys = {
+  { "SUPER + SHIFT + LEFT", "Swap window to the left", "l" },
+  { "SUPER + SHIFT + RIGHT", "Swap window to the right", "r" },
+  { "SUPER + SHIFT + UP", "Swap window up", "u" },
+  { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
+}
+
 local key_options = {
   sidebar = { toggle = true, convert = true },
   agent = { toggle = true, new = true, load = true, reset = true },
 }
 
--- Copies `overrides` onto `into` where the types fit the defaults (keys may also
--- be false to leave them unbound); anything else is reported and skipped.
-local function apply(into, overrides, path, problems)
+-- Copies `overrides` onto `into` where the types fit the defaults (key options
+-- may also be false to leave them unbound); anything else is reported and
+-- skipped.
+local function apply(into, overrides, path, problems, keys)
   for k, v in pairs(overrides) do
     local name = path .. tostring(k)
     local current = into[k]
@@ -104,11 +136,11 @@ local function apply(into, overrides, path, problems)
       problems[#problems + 1] = "unknown option " .. name
     elseif type(current) == "table" then
       if type(v) == "table" then
-        apply(current, v, name .. ".", problems)
+        apply(current, v, name .. ".", problems, key_options[k])
       else
         problems[#problems + 1] = name .. " must be a table"
       end
-    elseif type(v) == type(current) or (v == false and type(current) == "string") then
+    elseif type(v) == type(current) or (v == false and keys and keys[k]) then
       into[k] = v
     else
       problems[#problems + 1] = name .. " must be a " .. type(current)
@@ -128,7 +160,7 @@ do
     elseif type(overrides) ~= "table" then
       problems[#problems + 1] = "the file must return a table"
     else
-      apply(config, overrides, "", problems)
+      apply(config, overrides, "", problems, nil)
     end
   elseif load_err and not load_err:find("No such file", 1, true) then
     problems[#problems + 1] = load_err
@@ -138,26 +170,47 @@ do
     problems[#problems + 1] = "width must be between 0 and 1"
     config.width = 0.33
   end
-  if config.margin < 0 then
-    problems[#problems + 1] = "margin can't be negative"
+  if config.margin < 0 or config.margin > 200 then
+    problems[#problems + 1] = "margin must be between 0 and 200"
     config.margin = 24
   end
+  -- Used as a terminal app id and in a window rule: keep it to a plain id.
+  if not config.agent.class:match("^[%w][%w._-]*$") then
+    problems[#problems + 1] = "agent.class must be letters, digits, '.', '_' or '-'"
+    config.agent.class = "sidebar.agent"
+  end
 
-  -- Two options on one key would silently replace each other.
-  local seen = {}
-  for group, options in pairs(key_options) do
-    if group ~= "agent" or config.agent.enabled then
-      for option in pairs(options) do
-        local keys = config[group][option]
-        if keys then
-          local id = keys:upper():gsub("%s+", "")
-          if seen[id] then
-            problems[#problems + 1] = group .. "." .. option .. " uses the same key as " .. seen[id]
-            config[group][option] = false
-          else
-            seen[id] = group .. "." .. option
-          end
-        end
+  -- Two options on one key would silently replace each other, and the keys the
+  -- plugin takes over while a sidebar has focus can't be used for options.
+  -- Modifiers are compared in any order.
+  local function normalise(keys)
+    local parts = {}
+    for part in keys:gmatch("[^+]+") do
+      parts[#parts + 1] = part:gsub("^%s+", ""):gsub("%s+$", ""):upper()
+    end
+    local key = table.remove(parts)
+    table.sort(parts)
+    parts[#parts + 1] = key
+    return table.concat(parts, "+")
+  end
+  local seen = { [normalise("ESCAPE")] = "Escape (hides a sidebar)" }
+  for _, k in ipairs(resize_keys) do
+    seen[normalise(k[1])] = "Omarchy's resize keys"
+  end
+  for _, k in ipairs(swap_keys) do
+    seen[normalise(k[1])] = "Omarchy's swap keys"
+  end
+  for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "agent", "toggle" },
+    { "agent", "new" }, { "agent", "load" }, { "agent", "reset" } }) do
+    local group, name = option[1], option[2]
+    local keys = config[group][name]
+    if keys and (group ~= "agent" or config.agent.enabled) then
+      local id = normalise(keys)
+      if seen[id] then
+        problems[#problems + 1] = group .. "." .. name .. " uses the same key as " .. seen[id]
+        config[group][name] = false
+      else
+        seen[id] = group .. "." .. name
       end
     end
   end
@@ -193,8 +246,10 @@ local function slot_for_class(class)
 end
 
 -- Sidebar windows by address, so a window leaving its slot can be told apart
--- from an ordinary window moving between workspaces.
+-- from an ordinary window moving between workspaces, and whether each was
+-- floating before, to put it back that way.
 local members = {}
+local was_floating = {}
 
 local function selector(window)
   return "address:" .. window.address
@@ -207,11 +262,7 @@ end
 
 -- The window as it is now, or nil once it has closed.
 local function current(address)
-  for _, w in ipairs(hl.get_windows()) do
-    if w.address == address then
-      return w
-    end
-  end
+  return hl.get_window("address:" .. address)
 end
 
 -- A workspace selector for moving a window to a regular workspace by name.
@@ -314,13 +365,7 @@ local function slot_shown(slot, monitor)
 end
 
 local function slot_windows(slot)
-  local found = {}
-  for _, w in ipairs(hl.get_windows()) do
-    if w.workspace ~= nil and w.workspace.name == slot.workspace then
-      found[#found + 1] = w
-    end
-  end
-  return found
+  return hl.get_workspace_windows(slot.workspace) or {}
 end
 
 local function set_dim(window, on)
@@ -328,6 +373,9 @@ local function set_dim(window, on)
 end
 
 local function enter(window, slot)
+  if members[window.address] == nil then
+    was_floating[window.address] = window.floating == true
+  end
   members[window.address] = slot
   if window.pinned then
     dispatch_for(window, hl.dsp.window.pin, {})
@@ -360,19 +408,23 @@ local function hide_if_empty(slot, leaving)
       return
     end
   end
-  for _, m in ipairs(hl.get_monitors()) do
-    if slot_shown(slot, m) then
-      hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
-      return
-    end
+  -- The dispatcher acts on the active monitor; showing it elsewhere is left be.
+  if slot_shown(slot, hl.get_active_monitor()) then
+    hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
   end
 end
 
 local function leave(window, slot)
+  local floated = was_floating[window.address]
   members[window.address] = nil
+  was_floating[window.address] = nil
   hide_if_empty(slot, window.address)
   set_dim(window, false)
-  if window.floating then
+  if floated then
+    if window.floating then
+      dispatch_for(window, hl.dsp.window.center, {})
+    end
+  elseif window.floating then
     dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
   end
   sync_keys()
@@ -388,33 +440,6 @@ local function member_slot(window)
   end
 end
 
--- Keys that act on a sidebar differently from Omarchy are only taken over
--- while a sidebar has focus; the rest of the time Omarchy's own bindings are in
--- place untouched.
---
--- Omarchy's resize and swap keys (from default/hypr/bindings/tiling.lua),
--- restored exactly as Omarchy binds them when a sidebar loses focus.
-local resize_keys = {
-  { "SUPER + code:20", "Expand window left", -100, 0 },
-  { "SUPER + code:21", "Shrink window left", 100, 0 },
-  { "SUPER + SHIFT + code:20", "Shrink window up", 0, -100 },
-  { "SUPER + SHIFT + code:21", "Expand window down", 0, 100 },
-  { "SUPER + ALT + code:20", "Expand window left a little", -25, 0 },
-  { "SUPER + ALT + code:21", "Shrink window left a little", 25, 0 },
-  { "SUPER + SHIFT + ALT + code:20", "Shrink window up a little", 0, -25 },
-  { "SUPER + SHIFT + ALT + code:21", "Expand window down a little", 0, 25 },
-  { "SUPER + CTRL + code:20", "Expand window left a lot", -300, 0 },
-  { "SUPER + CTRL + code:21", "Shrink window left a lot", 300, 0 },
-  { "SUPER + CTRL + SHIFT + code:20", "Shrink window up a lot", 0, -300 },
-  { "SUPER + CTRL + SHIFT + code:21", "Expand window down a lot", 0, 300 },
-}
-local swap_keys = {
-  { "SUPER + SHIFT + LEFT", "Swap window to the left", "l" },
-  { "SUPER + SHIFT + RIGHT", "Swap window to the right", "r" },
-  { "SUPER + SHIFT + UP", "Swap window up", "u" },
-  { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
-}
-
 -- In a docked sidebar: MINUS widens and EQUAL narrows it away from its edge,
 -- with SHIFT they change its height from the top edge.
 local function resize_docked(dx, dy)
@@ -422,6 +447,8 @@ local function resize_docked(dx, dy)
   local slot = member_slot(window)
   if slot and window.floating then
     dock(window, slot, window.size.x - dx, window.size.y + dy, window.at.y)
+  else
+    hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
   end
 end
 
@@ -430,9 +457,13 @@ end
 local function swap_docked(direction)
   local window = hl.get_active_window()
   local slot = member_slot(window)
-  if slot and window.floating and (direction == "l" or direction == "r") then
-    save_side(slot, direction == "l" and "left" or "right")
-    dock(window, slot, window.size.x, window.size.y, window.at.y)
+  if slot and window.floating then
+    if direction == "l" or direction == "r" then
+      save_side(slot, direction == "l" and "left" or "right")
+      dock(window, slot, window.size.x, window.size.y, window.at.y)
+    end
+  else
+    hl.dispatch(hl.dsp.window.swap({ direction = direction }))
   end
 end
 
@@ -464,10 +495,17 @@ local function bind_omarchy_keys()
   end
 end
 
--- ESCAPE hides a visible, focused sidebar whose slot allows it, and is unbound
--- otherwise so it reaches apps everywhere else (this owns plain ESCAPE:
--- unbinding it would also drop any other plain ESCAPE binding). The resize and
--- swap keys are the sidebar versions while a floating sidebar has focus.
+-- A launcher, menu, prompt or screenshot selector taking the keyboard leaves
+-- the sidebar focused as far as windows go, but keys and clicks belong to it.
+local function keyboard_layer_open()
+  for _, l in ipairs(hl.get_layers()) do
+    if l.mapped and (l.interactivity or 0) ~= 0 then
+      return true
+    end
+  end
+  return false
+end
+
 -- A plain left click outside the focused sidebar hides it. The binding doesn't
 -- consume the click, so whatever was clicked still gets it. Clicking a window
 -- behind the sidebar can make Hyprland hide it too, so the hide waits until the
@@ -476,7 +514,7 @@ end
 local function hide_on_outside_click()
   local window = hl.get_active_window()
   local slot = member_slot(window)
-  if slot == nil or not slot_shown(slot, window.monitor) then
+  if slot == nil or not slot_shown(slot, window.monitor) or keyboard_layer_open() then
     return
   end
   local p = hl.get_cursor_pos()
@@ -497,23 +535,31 @@ local function hide_on_outside_click()
       return
     end
   end
+  -- The dispatcher acts on the active monitor, so only hide while the sidebar's
+  -- monitor is still the active one (a click on another monitor makes that one
+  -- active; toggling there would move the sidebar instead of hiding it).
   local monitor_id = window.monitor.id
   hl.timer(guard("hiding a sidebar", function()
-    for _, m in ipairs(hl.get_monitors()) do
-      if m.id == monitor_id and slot_shown(slot, m) then
-        hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
-      end
+    local m = hl.get_active_monitor()
+    if m and m.id == monitor_id and slot_shown(slot, m) then
+      hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
     end
   end), { timeout = 30, type = "oneshot" })
 end
 
+-- While a visible sidebar has focus (and no launcher or menu has the
+-- keyboard): ESCAPE hides it if its slot allows, a click outside hides it, and
+-- the resize/swap keys are the sidebar versions. Otherwise ESCAPE and the click
+-- are unbound (this owns plain ESCAPE and plain left click: any other such
+-- binding is dropped) and Omarchy's resize/swap keys are in place. With
+-- `omarchy_default_bindings = false` the resize/swap keys are left alone.
 local escape_slot = nil
 local sidebar_keys = false
 local click_bound = false
 function sync_keys()
   local window = hl.get_active_window()
   local slot = member_slot(window)
-  local visible = slot ~= nil and slot_shown(slot, window.monitor)
+  local visible = slot ~= nil and slot_shown(slot, window.monitor) and not keyboard_layer_open()
 
   local want_escape = nil
   if visible and slot.escape then
@@ -542,7 +588,7 @@ function sync_keys()
     click_bound = want_click
   end
 
-  local want_sidebar_keys = visible and window.floating
+  local want_sidebar_keys = visible and window.floating == true and omarchy_default_bindings ~= false
   if want_sidebar_keys ~= sidebar_keys then
     if want_sidebar_keys then
       bind_sidebar_keys()
@@ -558,8 +604,15 @@ for _, slot in pairs(slots) do
   for _, w in ipairs(slot_windows(slot)) do
     members[w.address] = slot
     set_dim(w, config.dim)
+    slot.docked_monitor = w.monitor and w.monitor.id
   end
 end
+
+local function sync_soon()
+  hl.timer(guard("updating sidebar keys", sync_keys), { timeout = 1, type = "oneshot" })
+end
+hl.on("layer.opened", guard("updating sidebar keys", sync_soon))
+hl.on("layer.closed", guard("updating sidebar keys", sync_soon))
 
 hl.on("window.active", guard("focus change", sync_keys))
 
@@ -606,8 +659,9 @@ hl.on("window.close", guard("closing a window", function(window)
   local address = window and window.address
   if address then
     members[address] = nil
+    was_floating[address] = nil
   end
-  hl.timer(guard("closing a window", sync_keys), { timeout = 1, type = "oneshot" })
+  sync_soon()
 end))
 
 hl.on("window.move_to_workspace", guard("moving a window", function(window, workspace)
@@ -742,19 +796,17 @@ local function convert()
   end
 
   local regular = regular_workspace(window.monitor)
-  local current_slot = member_slot(window)
-  if current_slot then
-    if regular then
-      dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name) })
-    end
+  if regular == nil then
+    return
+  end
+  if member_slot(window) then
+    dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name) })
     return
   end
 
   local slot = slot_for_class(window.class) or slots.sidebar
   for _, other in ipairs(slot_windows(slot)) do
-    if regular then
-      dispatch_for(other, hl.dsp.window.move, { workspace = workspace_target(regular.name), follow = false })
-    end
+    dispatch_for(other, hl.dsp.window.move, { workspace = workspace_target(regular.name), follow = false })
   end
   dispatch_for(window, hl.dsp.window.move, { workspace = slot.workspace })
 end

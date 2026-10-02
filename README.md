@@ -14,9 +14,13 @@ following every normal Omarchy binding. Turn it back into a sidebar any time.
 omarchy plugin add https://github.com/motorstreak/omarchy-sidebar.git --enable
 ```
 
-Remove it with `omarchy plugin remove sidebar` (or disable it with
-`omarchy plugin disable sidebar`): sidebar windows return to your workspace as
-normal windows, and its keys and behaviour go away.
+Update with `omarchy plugin update sidebar`; if an update changes
+`Service.qml`, also run `omarchy restart shell`.
+
+Remove it with `omarchy plugin remove sidebar`, or disable it with
+`omarchy plugin disable sidebar`. A few seconds later, sidebar windows return
+to your workspace as normal windows and the plugin's keys and behaviour go
+away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 
 ## Keys
 
@@ -28,51 +32,74 @@ normal windows, and its keys and behaviour go away.
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
 | `Super + Ctrl + Alt + A` | Reset the agent sidebar to its docked spot and size |
-| `Escape` | Hide any sidebar while it has focus (in the agent sidebar, use `Ctrl + C` to stop Claude mid-answer) |
 
-Inside any sidebar:
+Inside a sidebar that has focus:
 
 | Key | Action |
 |---|---|
-| `Super + Shift + Left/Right` | Dock to that edge, keeping its size (remembered) |
+| `Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
+| `Super + Shift + Left/Right` | Dock it to that edge, keeping its size (the side is remembered) |
 | `Super + Minus / Equal` | Wider / narrower, staying docked (`Alt` small steps, `Ctrl` big steps) |
-| `Super + Shift + Minus / Equal` | Shorter / taller from the top edge |
-| `Super + Shift + 1…0` | Move it to a workspace as a normal tiled window |
+| `Super + Shift + Minus / Equal` | Shorter / taller; the top edge stays put |
+| `Super + Shift + 1…0` | Move it to a workspace as a normal window |
+
+A hidden sidebar is still there: `Super + B` (or `Super + A`) brings it back.
 
 There is one generic sidebar at a time: converting a second window sends the
 first back to your workspace. The agent sidebar has its own slot.
 
-While a sidebar has focus, `Escape` hides it instead of reaching the app (a
-browser's find bar or fullscreen video, for example), and so does clicking
-anywhere outside it (the click still reaches what you clicked). Turn these off
-in the config below. A hidden sidebar is still there: `Super + B` (or
-`Super + A`) brings it back.
+While a sidebar has focus, `Escape` doesn't reach the app in it (a browser's
+find bar or fullscreen video, or Claude's interrupt: use `Ctrl + C` in Claude,
+or turn Escape off per sidebar in the config). Clicks on the bar, its panels,
+menus and notifications don't hide a sidebar; neither do keys or clicks while a
+launcher, menu or screenshot selector is open. A click on an app's own menu
+that reaches past the sidebar's edge counts as outside it and hides it.
 
-**Note:** the plugin re-binds `Super + Shift + A` (Omarchy's ChatGPT key). The
-resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and swap
-(`Super + Shift + arrows`) keys are only taken over while a sidebar has focus;
-everywhere else they are Omarchy's own bindings, untouched.
+### Keys the plugin uses
+
+- `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
+  replaces whatever was bound to that key before.
+- While a sidebar has focus, the plugin takes over plain `Escape`, plain left
+  click, and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and
+  swap (`Super + Shift + arrows`) keys. Everywhere else those are Omarchy's own
+  bindings: they start out untouched, and after a sidebar has had focus they
+  are re-bound exactly as Omarchy defines them. So if you've customised those
+  resize or swap keys (or bound plain `Escape` or left click yourself), your
+  version is replaced by Omarchy's until Hyprland reloads. With
+  `omarchy_default_bindings = false` the resize and swap keys are left alone.
 
 ## Configure
 
-Create `~/.config/omarchy/sidebar.lua` returning any options to override, then
-reload Hyprland (save any Hyprland config file, or `hyprctl reload`):
+Create `~/.config/omarchy/sidebar.lua` returning the options to change, then
+reload Hyprland (save any Hyprland config file, or `hyprctl reload`). All
+options, with their defaults:
 
 ```lua
 return {
-  width = 0.4,               -- default width as a share of the screen
-  margin = 16,               -- gap to screen edges and the bar
-  dim = false,               -- don't dim behind sidebars
-  click_outside = false,     -- clicking outside a sidebar doesn't hide it
-  sidebar = { escape = false }, -- let Escape reach the app in the sidebar
+  width = 0.33,          -- default width as a share of the screen
+  margin = 24,           -- gap to screen edges and the bar (0-200)
+  dim = true,            -- dim the rest of the screen while a sidebar shows
+  click_outside = true,  -- clicking outside a sidebar hides it
+  sidebar = {
+    toggle = "SUPER + B",
+    convert = "SUPER + ALT + B",
+    escape = true,       -- Escape hides it (false: Escape reaches the app)
+  },
   agent = {
-    toggle = "SUPER + C",    -- any key can be changed, or set to false
-    new = false,             -- keep Omarchy's ChatGPT key
+    enabled = true,      -- false leaves out the agent sidebar
+    class = "sidebar.agent", -- window class of the agent's terminal
+    toggle = "SUPER + A",
+    new = "SUPER + SHIFT + A", -- false keeps Omarchy's ChatGPT key
+    load = "SUPER + ALT + A",
+    reset = "SUPER + CTRL + ALT + A",
+    escape = true,       -- false: Escape reaches the agent (e.g. Claude's interrupt)
   },
 }
 ```
 
-Set `agent = { enabled = false }` to leave out the agent sidebar.
+Any key can be changed or set to `false` to leave it unbound. A key that's
+already bound (for example `SUPER + C`, Omarchy's copy) is replaced. Mistakes
+in the file are shown as a "Sidebar" notification.
 
 ## The agent sidebar
 
@@ -80,30 +107,30 @@ It runs your Omarchy default coding agent, set with
 `omarchy default agent <name>`. With none set, `Super + A` opens Omarchy's agent
 chooser (which starts the chosen agent in a normal window; press `Super + A`
 again for the sidebar). Agents start through Omarchy's own launcher, exactly as
-`Super + Shift + Ctrl + A` starts them.
+`Super + Shift + Ctrl + A` starts them; `Super + Shift + A` closes the running
+one and starts it fresh, without asking.
 
 Claude Code is the exception, because Omarchy's launcher can't pass it session
 options: Claude is run directly, pinned to one session, so closing the sidebar
 and pressing `Super + A` resumes the same conversation. New sessions are named
 with the date and time and, once they have a message, show up in the
-`Super + Alt + A` menu (your 50 newest; type to search their prompts) and in
+`Super + Alt + A` menu (the newest 50; type to search their prompts) and in
 Claude's `/resume` picker. Renaming one with Claude's `/rename` takes it out of
-the menu. It uses your normal Claude settings rather than the
-auto permission mode Omarchy's launcher starts Claude in.
+the menu. It uses your normal Claude settings rather than the auto permission
+mode Omarchy's launcher starts Claude in.
 
 ## Requirements
 
-Omarchy with Hyprland's Lua config (Hyprland 0.55+). The agent sidebar needs
-a default agent installed (`omarchy default agent`). Like Omarchy's own agent
-launcher, it runs in `~/Work` if that exists, otherwise in your home folder
-(where Claude asks to trust the folder each time).
+Omarchy with Hyprland's Lua config (tested on Hyprland 0.56). The agent
+sidebar needs a default agent installed (`omarchy default agent`). Like
+Omarchy's own agent launcher, it runs in `~/Work` if that exists, otherwise in
+your home folder (where Claude asks to trust the folder each time).
 
 ## How it works
 
 Omarchy shell plugins can't ship Hyprland config, so the plugin's service loads
 `hypr/sidebar.lua` into the running Hyprland with `hyprctl eval` at start and
 after every Hyprland config reload; after a plugin update it reloads Hyprland
-once to pick up the new code. Problems (including mistakes in
-`~/.config/omarchy/sidebar.lua`) are shown as a "Sidebar" notification. State
-(pinned Claude session, remembered sides) lives in
+once to pick up the new code. Problems are shown as a "Sidebar" notification.
+State (pinned Claude session, remembered sides) lives in
 `$XDG_STATE_HOME/omarchy-sidebar/` (normally `~/.local/state`).
