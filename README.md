@@ -57,6 +57,10 @@ menus and notifications don't hide a sidebar; neither do keys or clicks while a
 launcher, menu or screenshot selector is open. A click on an app's own menu
 that reaches past the sidebar's edge counts as outside it and hides it.
 
+A window that stops being the sidebar gets your theme's normal border colours
+(the first colour of a gradient border), replacing any border colour a window
+rule had given it; they follow theme changes while the plugin is installed.
+
 ### Keys the plugin uses
 
 - `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
