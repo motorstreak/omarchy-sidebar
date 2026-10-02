@@ -197,9 +197,12 @@ if [[ $agent == claude ]]; then
   # Only a session with a message in it can be resumed; one with none yet
   # starts under the same id.
   file=$(transcript "$session")
+  elsewhere=("$claude_dir"/projects/*/"$session".jsonl)
   if [[ -n $file ]] && grep -q '"type":"user"' "$file"; then
     command=(claude --resume "$session")
-  elif [[ -n $file ]]; then
+  elif [[ -n $file || -f ${elsewhere[0]} ]]; then
+    # No message yet, or filed under another folder (Claude won't resume it
+    # here): start a fresh session rather than reuse the id.
     new_session
     command=(claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")")
   else
