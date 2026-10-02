@@ -6,7 +6,9 @@ with one key. One key also makes your Omarchy default coding agent the sidebar,
 with saved, searchable sessions when that agent is Claude Code.
 
 There is only ever one sidebar: making a window the sidebar (including the
-agent) sends the previous one back to your workspace as a normal window.
+agent) sends the previous one back to your workspace as a normal window. Its
+border uses your theme's foreground colour, so it's easy to tell apart from
+normal windows wherever it is.
 
 Move a sidebar to a regular workspace and it becomes an ordinary window again,
 following every normal Omarchy binding. Turn it back into a sidebar any time.
@@ -79,6 +81,7 @@ return {
   width = 0.33,          -- default width as a share of the screen
   margin = 24,           -- gap to screen edges and the bar (0-200)
   dim = true,            -- dim the rest of the screen while a sidebar shows
+  border = "theme",      -- sidebar border: "theme" (foreground colour), "#14B9B5", or false
   click_outside = true,  -- clicking outside a sidebar hides it
   sidebar = {
     toggle = "SUPER + B",

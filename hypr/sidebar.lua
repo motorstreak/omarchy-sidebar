@@ -82,6 +82,9 @@ local defaults = {
   margin = 24, -- gap to the screen edges and bar
   width = 0.33, -- default width as a share of the monitor
   dim = true, -- dim the rest of the screen while the sidebar shows
+  -- The sidebar's border colour: "theme" (the theme's foreground colour), a
+  -- colour such as "#14B9B5" or "rgba(14b9b5ff)", or false for the usual border.
+  border = "theme",
   click_outside = true, -- clicking outside the shown sidebar hides it
   sidebar = {
     toggle = "SUPER + B",
@@ -124,6 +127,7 @@ local swap_keys = {
 }
 
 local key_options = {
+  [""] = { border = true },
   sidebar = { toggle = true, convert = true },
   agent = { toggle = true, new = true, load = true, reset = true },
 }
@@ -163,7 +167,7 @@ do
     elseif type(overrides) ~= "table" then
       problems[#problems + 1] = "the file must return a table"
     else
-      apply(config, overrides, "", problems, nil)
+      apply(config, overrides, "", problems, key_options[""])
     end
   elseif load_err and not load_err:find("No such file", 1, true) then
     problems[#problems + 1] = load_err
@@ -176,6 +180,11 @@ do
   if config.margin < 0 or config.margin > 200 then
     problems[#problems + 1] = "margin must be between 0 and 200"
     config.margin = 24
+  end
+  if config.border and config.border ~= "theme" and not config.border:match("^#%x%x%x%x%x%x$")
+      and not config.border:match("^rgba?%([%x, .]+%)$") then
+    problems[#problems + 1] = "border must be \"theme\", a colour like \"#14B9B5\", or false"
+    config.border = "theme"
   end
   -- Used as a terminal app id and in a window rule: keep it to a plain id.
   if not config.agent.class:match("^[%w][%w._-]*$") then
@@ -376,6 +385,74 @@ local function set_dim(window, on)
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "dim_around", value = on and "1" or "0" })
 end
 
+-- The sidebar's border colours (focused, unfocused), or nil to leave borders be.
+local sidebar_border = nil
+do
+  local spec = config.border
+  local hex = nil
+  if spec == "theme" then
+    local f = io.open(state_home .. "/omarchy/current/theme/colors.toml", "r")
+    if f then
+      hex = ("\n" .. f:read("a")):match('\n%s*foreground%s*=%s*"#?(%x%x%x%x%x%x)"')
+      f:close()
+    end
+  elseif spec then
+    hex = spec:match("^#(%x%x%x%x%x%x)$")
+    if hex == nil then
+      sidebar_border = { spec, spec }
+    end
+  end
+  if hex then
+    sidebar_border = { "rgba(" .. hex .. "ff)", "rgba(" .. hex .. "aa)" }
+  end
+end
+
+-- The theme's border colour for normal windows, as a set_prop value. Only the
+-- first colour of a gradient is kept (set_prop takes a single colour).
+local function theme_border(option)
+  local g = hl.get_config(option)
+  local c = g and g.colors and g.colors[1]
+  if type(c) == "number" then
+    c = string.format("0x%08X", c)
+  end
+  local alpha, rgb = tostring(c):match("^0[xX](%x%x)(%x%x%x%x%x%x)$")
+  return alpha and ("rgba(" .. rgb .. alpha .. ")") or nil
+end
+
+local function set_border(window, active, inactive)
+  if active then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "active_border_color", value = active })
+  end
+  if inactive then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "inactive_border_color", value = inactive })
+  end
+end
+
+-- A window's border colour can't be handed back to the theme, only set, and it
+-- survives config reloads. So windows given the theme's colours on leaving the
+-- sidebar are remembered, and get the current theme's colours again on every
+-- load (a theme change reloads Hyprland).
+local restored_file = state_root .. "/restored-borders"
+
+local function remember_restored(address)
+  local f = io.open(restored_file, "a")
+  if f then
+    f:write(address, "\n")
+    f:close()
+  end
+end
+
+local function style(window)
+  if sidebar_border then
+    set_border(window, sidebar_border[1], sidebar_border[2])
+  end
+end
+
+local function unstyle(window)
+  set_border(window, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
+  remember_restored(window.address)
+end
+
 -- Hides the sidebar if it is on screen and `leaving` was the last window in it.
 local function hide_if_empty(leaving)
   for _, w in ipairs(sidebar_windows()) do
@@ -395,6 +472,7 @@ local function leave(window)
   was_floating[window.address] = nil
   hide_if_empty(window.address)
   set_dim(window, false)
+  unstyle(window)
   if floated then
     if window.floating then
       dispatch_for(window, hl.dsp.window.center, {})
@@ -418,6 +496,7 @@ local function evict(window)
     leave(window)
   else
     set_dim(window, false)
+    unstyle(window)
   end
 end
 
@@ -445,6 +524,7 @@ local function enter(window, opened)
     dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
   end
   set_dim(window, config.dim)
+  style(window)
 
   -- Dock once floating has settled, or Hyprland restores the window's old
   -- floating position over ours; by then it may have closed or moved on.
@@ -630,6 +710,11 @@ do
     if w == keep then
       members[w.address] = true
       set_dim(w, config.dim)
+      if sidebar_border then
+        style(w)
+      else
+        unstyle(w)
+      end
       docked_monitor = w.monitor and w.monitor.id
     else
       set_dim(w, false)
@@ -645,6 +730,30 @@ do
       set_dim(w, false)
       evict(w)
     end
+  end
+end
+
+-- Windows that left the sidebar earlier: the current theme's border colours
+-- again, and forget the ones that have closed.
+do
+  local f = io.open(restored_file, "r")
+  local keep = {}
+  if f then
+    for address in f:lines() do
+      local w = current(address)
+      if w and not in_sidebar(w) and not keep[address] then
+        keep[address] = true
+        set_border(w, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
+      end
+    end
+    f:close()
+  end
+  f = io.open(restored_file, "w")
+  if f then
+    for address in pairs(keep) do
+      f:write(address, "\n")
+    end
+    f:close()
   end
 end
 
