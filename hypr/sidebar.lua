@@ -432,6 +432,19 @@ end
 
 -- Omarchy's swap keys: in a sidebar, LEFT/RIGHT dock it to that edge (keeping
 -- its size) and remember the side; UP/DOWN do nothing. Others swap as usual.
+local function swap(direction)
+  local window = hl.get_active_window()
+  local slot = member_slot(window)
+  if slot and window.floating then
+    if direction == "l" or direction == "r" then
+      save_side(slot, direction == "l" and "left" or "right")
+      dock(window, slot, window.size.x, window.size.y, window.at.y)
+    end
+  else
+    hl.dispatch(hl.dsp.window.swap({ direction = direction }))
+  end
+end
+
 for _, s in ipairs({
   { "LEFT", "l", "Swap window to the left" },
   { "RIGHT", "r", "Swap window to the right" },
@@ -440,22 +453,23 @@ for _, s in ipairs({
 }) do
   local key, direction, description = s[1], s[2], s[3]
   bind("SUPER + SHIFT + " .. key, description, function()
-    local window = hl.get_active_window()
-    local slot = member_slot(window)
-    if slot and window.floating then
-      if direction == "l" or direction == "r" then
-        save_side(slot, direction == "l" and "left" or "right")
-        dock(window, slot, window.size.x, window.size.y, window.at.y)
-      end
-    else
-      hl.dispatch(hl.dsp.window.swap({ direction = direction }))
-    end
+    swap(direction)
   end)
 end
 
 -- Omarchy's resize keys: in a sidebar they keep it docked to its edge (MINUS
 -- widens, EQUAL narrows; with SHIFT they change the height from the top edge).
 -- Others get Omarchy's usual relative resize.
+local function resize(dx, dy)
+  local window = hl.get_active_window()
+  local slot = member_slot(window)
+  if slot and window.floating then
+    dock(window, slot, window.size.x - dx, window.size.y + dy, window.at.y)
+  else
+    hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
+  end
+end
+
 for _, r in ipairs({
   { "SUPER + code:20", "Expand window left", -100, 0 },
   { "SUPER + code:21", "Shrink window left", 100, 0 },
@@ -472,13 +486,7 @@ for _, r in ipairs({
 }) do
   local keys, description, dx, dy = r[1], r[2], r[3], r[4]
   bind(keys, description, function()
-    local window = hl.get_active_window()
-    local slot = member_slot(window)
-    if slot and window.floating then
-      dock(window, slot, window.size.x - dx, window.size.y + dy, window.at.y)
-    else
-      hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
-    end
+    resize(dx, dy)
   end)
 end
 
@@ -495,4 +503,6 @@ sidebar = {
     return show(slots[name])
   end,
   convert = convert,
+  swap = swap,
+  resize = resize,
 }
