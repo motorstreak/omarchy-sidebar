@@ -480,9 +480,22 @@ local function hide_on_outside_click()
     return
   end
   local p = hl.get_cursor_pos()
-  if p and p.x >= window.at.x and p.x < window.at.x + window.size.x
+  if p == nil then
+    return
+  end
+  if p.x >= window.at.x and p.x < window.at.x + window.size.x
       and p.y >= window.at.y and p.y < window.at.y + window.size.y then
     return
+  end
+  -- Clicks on the bar, its panels, menus and notifications (layer surfaces
+  -- above windows) leave the sidebar alone; closing such a panel would hand
+  -- focus back to the hidden sidebar and show it again. The desktop
+  -- background is a layer too, but below windows, so clicking it still hides.
+  for _, l in ipairs(hl.get_layers()) do
+    if l.mapped and (l.layer or 0) >= 2 and p.x >= l.x and p.x < l.x + l.w
+        and p.y >= l.y and p.y < l.y + l.h then
+      return
+    end
   end
   local monitor_id = window.monitor.id
   hl.timer(guard("hiding a sidebar", function()
