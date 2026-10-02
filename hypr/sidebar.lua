@@ -300,11 +300,11 @@ end
 
 -- Show/hide a slot. If its window was moved out to a regular workspace: jump to
 -- it, or, when it already has focus there, send it back into the slot (hidden).
-local function toggle(slot, launch)
+local function toggle(slot)
   local window = find_window(slot)
   if window == nil then
-    if launch then
-      launch()
+    if slot.launch then
+      slot.launch()
     else
       notify("No sidebar yet: focus a window and press " .. config.sidebar.convert)
     end
@@ -408,13 +408,14 @@ if slots.claude then
   -- A second press while Claude is still starting would launch a second Claude
   -- on the same session; the script also guards this with a lock.
   local launched_at = 0
+  slots.claude.launch = function()
+    if os.time() - launched_at >= 5 then
+      launched_at = os.time()
+      run("launch")
+    end
+  end
   bind(config.claude.toggle, "Claude sidebar", function()
-    toggle(slots.claude, function()
-      if os.time() - launched_at >= 5 then
-        launched_at = os.time()
-        run("launch")
-      end
-    end)
+    toggle(slots.claude)
   end)
   bind(config.claude.new, "New Claude sidebar session", function()
     run("new")
@@ -424,7 +425,7 @@ if slots.claude then
   end)
   bind(config.claude.reset, "Reset Claude sidebar", function()
     if not reset(slots.claude) then
-      run("launch")
+      slots.claude.launch()
     end
   end)
 end
