@@ -489,9 +489,10 @@ end
 -- handler, which is where a replaced sidebar is usually evicted from.
 local function evict(window)
   local regular = regular_workspace(window.monitor)
-  if regular then
-    dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name), follow = false })
+  if regular == nil then
+    return
   end
+  dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name), follow = false })
   if members[window.address] then
     leave(window)
   else
@@ -642,6 +643,7 @@ local function hide_on_outside_click()
     local m = hl.get_active_monitor()
     if m and m.id == monitor_id and sidebar_shown(m) then
       hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
+      sync_keys()
     end
   end), { timeout = 30, type = "oneshot" })
 end
@@ -722,10 +724,13 @@ do
     end
   end
   -- Before 0.2 the agent had its own special workspace.
+  -- The move's event fires before the handlers below are registered, so the
+  -- window enters here.
   for _, w in ipairs(hl.get_workspace_windows(LEGACY_WORKSPACE) or {}) do
     if keep == nil then
       keep = w
       dispatch_for(w, hl.dsp.window.move, { workspace = WORKSPACE, follow = false })
+      enter(w)
     else
       set_dim(w, false)
       evict(w)
