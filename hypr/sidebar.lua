@@ -469,7 +469,10 @@ end
 -- unbinding it would also drop any other plain ESCAPE binding). The resize and
 -- swap keys are the sidebar versions while a floating sidebar has focus.
 -- A plain left click outside the focused sidebar hides it. The binding doesn't
--- consume the click, so whatever was clicked still gets it.
+-- consume the click, so whatever was clicked still gets it. Clicking a window
+-- behind the sidebar can make Hyprland hide it too, so the hide waits until the
+-- click has been handled and only happens if the sidebar is still shown (the
+-- dispatcher toggles, so hiding twice would show it again).
 local function hide_on_outside_click()
   local window = hl.get_active_window()
   local slot = member_slot(window)
@@ -481,7 +484,14 @@ local function hide_on_outside_click()
       and p.y >= window.at.y and p.y < window.at.y + window.size.y then
     return
   end
-  hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
+  local monitor_id = window.monitor.id
+  hl.timer(guard("hiding a sidebar", function()
+    for _, m in ipairs(hl.get_monitors()) do
+      if m.id == monitor_id and slot_shown(slot, m) then
+        hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
+      end
+    end
+  end), { timeout = 30, type = "oneshot" })
 end
 
 local escape_slot = nil
