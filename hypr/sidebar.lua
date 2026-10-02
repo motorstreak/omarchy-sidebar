@@ -302,9 +302,9 @@ end
 
 -- Entering and leaving sidebar mode -------------------------------------------
 
--- Defined further down; entering and leaving re-check it, since a new window's
--- focus event can arrive before it has entered its slot.
-local sync_escape
+-- Defined further down; entering and leaving re-check the sidebar keys, since a
+-- new window's focus event can arrive before it has entered its slot.
+local sync_keys
 
 local function slot_shown(slot, monitor)
   monitor = monitor or hl.get_active_monitor()
@@ -347,9 +347,9 @@ local function enter(window, slot)
     if now and members[address] == slot and now.floating and now.workspace and now.workspace.name == slot.workspace then
       dock_default(now, slot)
     end
-    sync_escape()
+    sync_keys()
   end), { timeout = 50, type = "oneshot" })
-  sync_escape()
+  sync_keys()
 end
 
 -- Hides the slot if it is on screen and `leaving` was the last window in it.
@@ -374,7 +374,7 @@ local function leave(window, slot)
   if window.floating then
     dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
   end
-  sync_escape()
+  sync_keys()
 end
 
 local function member_slot(window)
@@ -387,27 +387,116 @@ local function member_slot(window)
   end
 end
 
--- ESCAPE hides a visible, focused sidebar whose slot allows it; it is unbound
--- otherwise so ESCAPE reaches apps everywhere else. Note this owns plain ESCAPE:
--- unbinding it would also drop any other plain ESCAPE binding.
-local escape_slot = nil
-function sync_escape()
+-- Keys that act on a sidebar differently from Omarchy are only taken over
+-- while a sidebar has focus; the rest of the time Omarchy's own bindings are in
+-- place untouched.
+--
+-- Omarchy's resize and swap keys (from default/hypr/bindings/tiling.lua),
+-- restored exactly as Omarchy binds them when a sidebar loses focus.
+local resize_keys = {
+  { "SUPER + code:20", "Expand window left", -100, 0 },
+  { "SUPER + code:21", "Shrink window left", 100, 0 },
+  { "SUPER + SHIFT + code:20", "Shrink window up", 0, -100 },
+  { "SUPER + SHIFT + code:21", "Expand window down", 0, 100 },
+  { "SUPER + ALT + code:20", "Expand window left a little", -25, 0 },
+  { "SUPER + ALT + code:21", "Shrink window left a little", 25, 0 },
+  { "SUPER + SHIFT + ALT + code:20", "Shrink window up a little", 0, -25 },
+  { "SUPER + SHIFT + ALT + code:21", "Expand window down a little", 0, 25 },
+  { "SUPER + CTRL + code:20", "Expand window left a lot", -300, 0 },
+  { "SUPER + CTRL + code:21", "Shrink window left a lot", 300, 0 },
+  { "SUPER + CTRL + SHIFT + code:20", "Shrink window up a lot", 0, -300 },
+  { "SUPER + CTRL + SHIFT + code:21", "Expand window down a lot", 0, 300 },
+}
+local swap_keys = {
+  { "SUPER + SHIFT + LEFT", "Swap window to the left", "l" },
+  { "SUPER + SHIFT + RIGHT", "Swap window to the right", "r" },
+  { "SUPER + SHIFT + UP", "Swap window up", "u" },
+  { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
+}
+
+-- In a docked sidebar: MINUS widens and EQUAL narrows it away from its edge,
+-- with SHIFT they change its height from the top edge.
+local function resize_docked(dx, dy)
   local window = hl.get_active_window()
   local slot = member_slot(window)
-  local want = nil
-  if slot and slot.escape and slot_shown(slot, window.monitor) then
-    want = slot
+  if slot and window.floating then
+    dock(window, slot, window.size.x - dx, window.size.y + dy, window.at.y)
   end
-  if want == escape_slot then
-    return
+end
+
+-- In a docked sidebar: LEFT/RIGHT dock it to that edge (keeping its size) and
+-- remember the side; UP/DOWN do nothing.
+local function swap_docked(direction)
+  local window = hl.get_active_window()
+  local slot = member_slot(window)
+  if slot and window.floating and (direction == "l" or direction == "r") then
+    save_side(slot, direction == "l" and "left" or "right")
+    dock(window, slot, window.size.x, window.size.y, window.at.y)
   end
-  if escape_slot then
-    hl.unbind("ESCAPE")
+end
+
+local function bind_sidebar_keys()
+  for _, r in ipairs(resize_keys) do
+    local dx, dy = r[3], r[4]
+    hl.unbind(r[1])
+    o.bind(r[1], r[2], guard(r[2], function()
+      resize_docked(dx, dy)
+    end))
   end
-  if want then
-    hl.bind("ESCAPE", hl.dsp.workspace.toggle_special(want.name), { description = "Hide sidebar" })
+  for _, s in ipairs(swap_keys) do
+    local direction = s[3]
+    hl.unbind(s[1])
+    o.bind(s[1], s[2], guard(s[2], function()
+      swap_docked(direction)
+    end))
   end
-  escape_slot = want
+end
+
+local function bind_omarchy_keys()
+  for _, r in ipairs(resize_keys) do
+    hl.unbind(r[1])
+    o.bind(r[1], r[2], hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
+  end
+  for _, s in ipairs(swap_keys) do
+    hl.unbind(s[1])
+    o.bind(s[1], s[2], hl.dsp.window.swap({ direction = s[3] }))
+  end
+end
+
+-- ESCAPE hides a visible, focused sidebar whose slot allows it, and is unbound
+-- otherwise so it reaches apps everywhere else (this owns plain ESCAPE:
+-- unbinding it would also drop any other plain ESCAPE binding). The resize and
+-- swap keys are the sidebar versions while a floating sidebar has focus.
+local escape_slot = nil
+local sidebar_keys = false
+function sync_keys()
+  local window = hl.get_active_window()
+  local slot = member_slot(window)
+  local visible = slot ~= nil and slot_shown(slot, window.monitor)
+
+  local want_escape = nil
+  if visible and slot.escape then
+    want_escape = slot
+  end
+  if want_escape ~= escape_slot then
+    if escape_slot then
+      hl.unbind("ESCAPE")
+    end
+    if want_escape then
+      hl.bind("ESCAPE", hl.dsp.workspace.toggle_special(want_escape.name), { description = "Hide sidebar" })
+    end
+    escape_slot = want_escape
+  end
+
+  local want_sidebar_keys = visible and window.floating
+  if want_sidebar_keys ~= sidebar_keys then
+    if want_sidebar_keys then
+      bind_sidebar_keys()
+    else
+      bind_omarchy_keys()
+    end
+    sidebar_keys = want_sidebar_keys
+  end
 end
 
 -- Windows already in a slot when this loads (e.g. after a config reload).
@@ -418,7 +507,7 @@ for _, slot in pairs(slots) do
   end
 end
 
-hl.on("window.active", guard("focus change", sync_escape))
+hl.on("window.active", guard("focus change", sync_keys))
 
 hl.on("workspace.special_active", guard("showing a sidebar", function()
   -- A slot shown on another monitor than it was docked on: dock it there.
@@ -432,7 +521,7 @@ hl.on("workspace.special_active", guard("showing a sidebar", function()
       end
     end
   end
-  sync_escape()
+  sync_keys()
 end))
 
 -- A new window lands on whatever special workspace is on screen. Only an app
@@ -464,7 +553,7 @@ hl.on("window.close", guard("closing a window", function(window)
   if address then
     members[address] = nil
   end
-  hl.timer(guard("closing a window", sync_escape), { timeout = 1, type = "oneshot" })
+  hl.timer(guard("closing a window", sync_keys), { timeout = 1, type = "oneshot" })
 end))
 
 hl.on("window.move_to_workspace", guard("moving a window", function(window, workspace)
@@ -660,68 +749,8 @@ if slots.agent then
   end)
 end
 
--- Omarchy's swap keys: in a sidebar, LEFT/RIGHT dock it to that edge (keeping
--- its size) and remember the side; UP/DOWN do nothing. Others swap as usual.
-local function swap(direction)
-  local window = hl.get_active_window()
-  local slot = member_slot(window)
-  if slot and window.floating then
-    if direction == "l" or direction == "r" then
-      save_side(slot, direction == "l" and "left" or "right")
-      dock(window, slot, window.size.x, window.size.y, window.at.y)
-    end
-  else
-    hl.dispatch(hl.dsp.window.swap({ direction = direction }))
-  end
-end
-
-for _, s in ipairs({
-  { "LEFT", "l", "Swap window to the left" },
-  { "RIGHT", "r", "Swap window to the right" },
-  { "UP", "u", "Swap window up" },
-  { "DOWN", "d", "Swap window down" },
-}) do
-  local key, direction, description = s[1], s[2], s[3]
-  bind("SUPER + SHIFT + " .. key, description, function()
-    swap(direction)
-  end)
-end
-
--- Omarchy's resize keys: in a sidebar they keep it docked to its edge (MINUS
--- widens, EQUAL narrows; with SHIFT they change the height from the top edge).
--- Others get Omarchy's usual relative resize.
-local function resize(dx, dy)
-  local window = hl.get_active_window()
-  local slot = member_slot(window)
-  if slot and window.floating then
-    dock(window, slot, window.size.x - dx, window.size.y + dy, window.at.y)
-  else
-    hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
-  end
-end
-
-for _, r in ipairs({
-  { "SUPER + code:20", "Expand window left", -100, 0 },
-  { "SUPER + code:21", "Shrink window left", 100, 0 },
-  { "SUPER + SHIFT + code:20", "Shrink window up", 0, -100 },
-  { "SUPER + SHIFT + code:21", "Expand window down", 0, 100 },
-  { "SUPER + ALT + code:20", "Expand window left a little", -25, 0 },
-  { "SUPER + ALT + code:21", "Shrink window left a little", 25, 0 },
-  { "SUPER + SHIFT + ALT + code:20", "Shrink window up a little", 0, -25 },
-  { "SUPER + SHIFT + ALT + code:21", "Expand window down a little", 0, 25 },
-  { "SUPER + CTRL + code:20", "Expand window left a lot", -300, 0 },
-  { "SUPER + CTRL + code:21", "Shrink window left a lot", 300, 0 },
-  { "SUPER + CTRL + SHIFT + code:20", "Shrink window up a lot", 0, -300 },
-  { "SUPER + CTRL + SHIFT + code:21", "Expand window down a lot", 0, 300 },
-}) do
-  local keys, description, dx, dy = r[1], r[2], r[3], r[4]
-  bind(keys, description, function()
-    resize(dx, dy)
-  end)
-end
-
 -- A sidebar may already have focus when this loads (e.g. after a reload).
-guard("loading", sync_escape)()
+guard("loading", sync_keys)()
 
 -- For scripting and tests: `hyprctl eval 'sidebar.toggle("agent")'` etc.
 -- Unknown or disabled slot names are ignored.
@@ -754,6 +783,6 @@ sidebar = {
   reset = by_name(reset),
   show = by_name(show),
   convert = convert,
-  swap = swap,
-  resize = resize,
+  swap = swap_docked,
+  resize = resize_docked,
 }

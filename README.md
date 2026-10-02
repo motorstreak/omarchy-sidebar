@@ -46,10 +46,10 @@ While a sidebar has focus, `Escape` hides it instead of reaching the app (a
 browser's find bar or fullscreen video, for example). Turn that off per slot in
 the config below.
 
-**Note:** the plugin re-binds `Super + Shift + A` (Omarchy's ChatGPT key) and
-wraps Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and swap
-(`Super + Shift + arrows`) keys. Those behave exactly as before for every window
-that isn't a sidebar.
+**Note:** the plugin re-binds `Super + Shift + A` (Omarchy's ChatGPT key). The
+resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and swap
+(`Super + Shift + arrows`) keys are only taken over while a sidebar has focus;
+everywhere else they are Omarchy's own bindings, untouched.
 
 ## Configure
 
