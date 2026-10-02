@@ -1,0 +1,119 @@
+#!/bin/bash
+# Claude Code sessions for the Claude sidebar (run by hypr/sidebar.lua).
+#   claude-sidebar launch   open the sidebar on its current session
+#   claude-sidebar new      start a fresh session (SUPER + SHIFT + A)
+#   claude-sidebar load     pick an earlier sidebar session (SUPER + ALT + A)
+# The sidebar is pinned to one Claude session, so closing the window and
+# relaunching resumes the same conversation. New sessions are named with a
+# timestamp so they can be found again here or in Claude's /resume picker.
+
+class=${SIDEBAR_CLAUDE_CLASS:-sidebar.claude}
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-sidebar/claude
+
+# Claude keeps sessions per directory; run where Omarchy's own agent launcher
+# does, so the folder is trusted and sessions land in one place.
+work_dir=$HOME
+[[ -d $HOME/Work ]] && work_dir=$HOME/Work
+projects=$HOME/.claude/projects/$(sed 's|[/.]|-|g' <<<"$work_dir")
+
+# One instance at a time: a second run while the sidebar is still starting
+# would launch a second Claude on the same session.
+mkdir -p "$state_dir"
+exec 9>"$state_dir/lock"
+flock -n 9 || exit 0
+
+window_open() {
+  hyprctl clients -j | jq -e --arg c "$class" 'any(.[]; .class == $c)' >/dev/null
+}
+
+# Fails (and says so) if the window won't close, so callers don't switch
+# sessions and launch a second sidebar next to it.
+close_window() {
+  window_open || return 0
+  hyprctl dispatch "hl.dsp.window.close({ window = \"class:^${class//./\\\\.}\$\" })" >/dev/null
+  for _ in {1..30}; do window_open || return 0; sleep 0.1; done
+  notify-send "Claude sidebar" "The sidebar didn't close; leaving it as is"
+  return 1
+}
+
+new_session() {
+  uuidgen >"$state_dir/session-id"
+  date '+%Y-%m-%d %H:%M' >"$state_dir/session-name"
+}
+
+# Lists sidebar sessions (timestamp-named), newest first, as a searchable menu
+# and sets picked_id/picked_name. Returns 1 if nothing was picked.
+pick_session() {
+  local current f id title prompt key choice
+  local -A ids=()
+  local options=()
+  current=$(cat "$state_dir/session-id" 2>/dev/null)
+
+  while IFS= read -r f; do
+    title=$(grep -h '"type":"custom-title"' "$f" | tail -1 | jq -r .customTitle)
+    [[ $title =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
+    id=$(basename "$f" .jsonl)
+    # Every prompt typed in the session, newest first: the menu shows the start
+    # of this line but searches all of it, so any past question finds it.
+    prompt=$(jq -rs '[.[] | select(.type == "user" and .isMeta != true and (.message.content | type) == "string")
+                      | .message.content | select(startswith("<") | not) | gsub("\\s+"; " ")]
+                     | reverse | join(" · ") | .[0:2000]' "$f" 2>/dev/null)
+    [[ $id == "$current" ]] && prompt="(current) $prompt"
+    key="$title"$'\t'"$prompt"
+    ids[$key]=$id
+    options+=("󰍩"$'\t'"$key")
+  done < <(ls -t "$projects"/*.jsonl 2>/dev/null)
+
+  if ((${#options[@]} == 0)); then
+    notify-send "Claude sidebar" "No saved sidebar sessions yet"
+    return 1
+  fi
+
+  choice=$(omarchy-menu-select "Claude sessions" "${options[@]}" -- --width 600 --maxheight 600) || return 1
+  [[ -n $choice && -n ${ids[$choice]:-} ]] || return 1
+  picked_id=${ids[$choice]}
+  picked_name=${choice%%$'\t'*}
+}
+
+case ${1:-launch} in
+launch)
+  # The toggle key only launches when no sidebar exists; don't add a second.
+  window_open && exit 0
+  ;;
+new)
+  close_window || exit 1
+  new_session
+  ;;
+load)
+  pick_session || exit 0
+  if [[ $picked_id == "$(cat "$state_dir/session-id" 2>/dev/null)" ]] && window_open; then
+    hyprctl eval 'sidebar.show("claude")' >/dev/null
+    exit 0
+  fi
+  close_window || exit 1
+  echo "$picked_id" >"$state_dir/session-id"
+  echo "$picked_name" >"$state_dir/session-name"
+  ;;
+*)
+  echo "Usage: claude-sidebar [launch|new|load]" >&2
+  exit 1
+  ;;
+esac
+
+[[ -s $state_dir/session-id ]] || new_session
+session=$(<"$state_dir/session-id")
+name=$(cat "$state_dir/session-name" 2>/dev/null)
+[[ -n $name ]] || name=$(date '+%Y-%m-%d %H:%M')
+
+cd "$work_dir" || exit 1
+
+# A session with no messages has no transcript yet and can't be resumed.
+if [[ -f $projects/$session.jsonl ]]; then
+  args=(--resume "$session")
+else
+  args=(--session-id "$session" --name "$name")
+fi
+
+# Hold the lock until the window exists; the terminal mustn't inherit it.
+omarchy-launch-tui --app-id="$class" claude "${args[@]}" 9>&- &
+for _ in {1..50}; do window_open && break; sleep 0.1; done

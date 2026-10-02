@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "sidebar",
+  "name": "Sidebar",
+  "version": "0.1.0",
+  "author": "Navin Samuel",
+  "description": "Turn any window into a docked, dimming sidebar you toggle with a key, plus a built-in Claude Code sidebar with saved sessions.",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
