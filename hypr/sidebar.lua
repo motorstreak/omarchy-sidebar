@@ -165,6 +165,10 @@ end
 
 -- Entering and leaving sidebar mode -------------------------------------------
 
+-- Defined further down; entering and leaving re-check it, since a new window's
+-- focus event can arrive before it has entered its slot.
+local sync_escape
+
 local function slot_shown(slot, monitor)
   local shown = (monitor or hl.get_active_monitor()).active_special_workspace
   return shown ~= nil and shown.name == slot.workspace
@@ -186,7 +190,9 @@ local function enter(window, slot)
   -- floating position over ours.
   hl.timer(function()
     dock_default(window, slot)
+    sync_escape()
   end, { timeout = 50, type = "oneshot" })
+  sync_escape()
 end
 
 local function leave(window, slot)
@@ -199,6 +205,7 @@ local function leave(window, slot)
   if window.floating then
     dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
   end
+  sync_escape()
 end
 
 local function slot_windows(slot)
@@ -232,7 +239,7 @@ end
 -- ESCAPE hides a visible, focused sidebar whose slot allows it; it is unbound
 -- otherwise so ESCAPE reaches apps everywhere else.
 local escape_bound = false
-local function sync_escape()
+function sync_escape()
   local window = hl.get_active_window()
   local slot = member_slot(window)
   local want = slot ~= nil and slot.escape and slot_shown(slot, window.monitor)
@@ -490,6 +497,9 @@ for _, r in ipairs({
     resize(dx, dy)
   end)
 end
+
+-- A sidebar may already have focus when this loads (e.g. after a reload).
+sync_escape()
 
 -- For testing and scripting: `hyprctl eval 'sidebar.toggle("agent")'` etc.
 sidebar = {
