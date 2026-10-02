@@ -43,8 +43,10 @@ There is one generic sidebar at a time: converting a second window sends the
 first back to your workspace. The agent sidebar has its own slot.
 
 While a sidebar has focus, `Escape` hides it instead of reaching the app (a
-browser's find bar or fullscreen video, for example). Turn that off per slot in
-the config below.
+browser's find bar or fullscreen video, for example), and so does clicking
+anywhere outside it (the click still reaches what you clicked). Turn these off
+in the config below. A hidden sidebar is still there: `Super + B` (or
+`Super + A`) brings it back.
 
 **Note:** the plugin re-binds `Super + Shift + A` (Omarchy's ChatGPT key). The
 resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and swap
@@ -61,6 +63,7 @@ return {
   width = 0.4,               -- default width as a share of the screen
   margin = 16,               -- gap to screen edges and the bar
   dim = false,               -- don't dim behind sidebars
+  click_outside = false,     -- clicking outside a sidebar doesn't hide it
   sidebar = { escape = false }, -- let Escape reach the app in the sidebar
   agent = {
     toggle = "SUPER + C",    -- any key can be changed, or set to false

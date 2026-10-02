@@ -72,6 +72,7 @@ local defaults = {
   margin = 24, -- gap to the screen edges and bar
   width = 0.33, -- default width as a share of the monitor
   dim = true, -- dim the rest of the screen while a sidebar shows
+  click_outside = true, -- clicking outside a shown sidebar hides it
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -467,8 +468,25 @@ end
 -- otherwise so it reaches apps everywhere else (this owns plain ESCAPE:
 -- unbinding it would also drop any other plain ESCAPE binding). The resize and
 -- swap keys are the sidebar versions while a floating sidebar has focus.
+-- A plain left click outside the focused sidebar hides it. The binding doesn't
+-- consume the click, so whatever was clicked still gets it.
+local function hide_on_outside_click()
+  local window = hl.get_active_window()
+  local slot = member_slot(window)
+  if slot == nil or not slot_shown(slot, window.monitor) then
+    return
+  end
+  local p = hl.get_cursor_pos()
+  if p and p.x >= window.at.x and p.x < window.at.x + window.size.x
+      and p.y >= window.at.y and p.y < window.at.y + window.size.y then
+    return
+  end
+  hl.dispatch(hl.dsp.workspace.toggle_special(slot.name))
+end
+
 local escape_slot = nil
 local sidebar_keys = false
+local click_bound = false
 function sync_keys()
   local window = hl.get_active_window()
   local slot = member_slot(window)
@@ -486,6 +504,19 @@ function sync_keys()
       hl.bind("ESCAPE", hl.dsp.workspace.toggle_special(want_escape.name), { description = "Hide sidebar" })
     end
     escape_slot = want_escape
+  end
+
+  local want_click = visible and config.click_outside
+  if want_click ~= click_bound then
+    if want_click then
+      hl.bind("mouse:272", guard("hiding a sidebar", hide_on_outside_click), {
+        non_consuming = true,
+        description = "Hide sidebar on a click outside it",
+      })
+    else
+      hl.unbind("mouse:272")
+    end
+    click_bound = want_click
   end
 
   local want_sidebar_keys = visible and window.floating
