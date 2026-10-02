@@ -11,11 +11,12 @@ following every normal Omarchy binding. Turn it back into a sidebar any time.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/omarchy-sidebar.git --enable
+omarchy plugin add https://github.com/motorstreak/omarchy-sidebar.git --enable
 ```
 
-Remove it with `omarchy plugin remove sidebar`; its keys and behaviour go away
-immediately.
+Remove it with `omarchy plugin remove sidebar` (or disable it with
+`omarchy plugin disable sidebar`): sidebar windows return to your workspace as
+normal windows, and its keys and behaviour go away.
 
 ## Keys
 
@@ -25,9 +26,9 @@ immediately.
 | `Super + B` | Show/hide the sidebar |
 | `Super + A` | Show/hide the agent sidebar (launches it the first time) |
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
-| `Super + Alt + A` | Pick a saved session, Claude only (type to search all its prompts) |
+| `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
 | `Super + Ctrl + Alt + A` | Reset the agent sidebar to its docked spot and size |
-| `Escape` | Hide the agent sidebar while it has focus |
+| `Escape` | Hide the agent sidebar while it has focus (use `Ctrl + C` to stop Claude mid-answer) |
 
 Inside any sidebar:
 
@@ -68,26 +69,34 @@ Set `agent = { enabled = false }` to leave out the agent sidebar.
 
 ## The agent sidebar
 
-It runs your Omarchy default coding agent (`omarchy default agent <name>`; with
-none set, `Super + A` offers the choice). Agents start through Omarchy's own
-launcher, exactly as `Super + Shift + Ctrl + A` starts them.
+It runs your Omarchy default coding agent, set with
+`omarchy default agent <name>`. With none set, `Super + A` opens Omarchy's agent
+chooser (which starts the chosen agent in a normal window; press `Super + A`
+again for the sidebar). Agents start through Omarchy's own launcher, exactly as
+`Super + Shift + Ctrl + A` starts them.
 
 Claude Code is the exception, because Omarchy's launcher can't pass it session
 options: Claude is run directly, pinned to one session, so closing the sidebar
 and pressing `Super + A` resumes the same conversation. New sessions are named
-with the date and time and show up in the `Super + Alt + A` menu and in
-Claude's `/resume` picker. It uses your normal Claude settings rather than the
+with the date and time and, once they have a message, show up in the
+`Super + Alt + A` menu (your 50 newest; type to search their prompts) and in
+Claude's `/resume` picker. Renaming one with Claude's `/rename` takes it out of
+the menu. It uses your normal Claude settings rather than the
 auto permission mode Omarchy's launcher starts Claude in.
 
 ## Requirements
 
 Omarchy with Hyprland's Lua config (Hyprland 0.55+). The agent sidebar needs
-a default agent installed (`omarchy default agent`); it runs in `~/Work` if it
-exists, otherwise your home folder.
+a default agent installed (`omarchy default agent`). Like Omarchy's own agent
+launcher, it runs in `~/Work` if that exists, otherwise in your home folder
+(where Claude asks to trust the folder each time).
 
 ## How it works
 
 Omarchy shell plugins can't ship Hyprland config, so the plugin's service loads
 `hypr/sidebar.lua` into the running Hyprland with `hyprctl eval` at start and
-after every Hyprland config reload. State (pinned Claude session, remembered
-sides) lives in `~/.local/state/omarchy-sidebar/`.
+after every Hyprland config reload; after a plugin update it reloads Hyprland
+once to pick up the new code. Problems (including mistakes in
+`~/.config/omarchy/sidebar.lua`) are shown as a "Sidebar" notification. State
+(pinned Claude session, remembered sides) lives in
+`$XDG_STATE_HOME/omarchy-sidebar/` (normally `~/.local/state`).

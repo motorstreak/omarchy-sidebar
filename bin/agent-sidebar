@@ -13,78 +13,125 @@
 # timestamp so they can be found again here or in Claude's /resume picker.
 
 class=${SIDEBAR_AGENT_CLASS:-sidebar.agent}
-state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-sidebar/agent
+state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+state_dir=$state_home/omarchy-sidebar/agent
+claude_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+
+notify() {
+  notify-send -a Sidebar "Agent sidebar" "$1" 9>&-
+}
+
+for cmd in jq flock hyprctl; do
+  if ! command -v "$cmd" >/dev/null; then
+    notify "Needs $cmd, which isn't installed"
+    exit 1
+  fi
+done
+
 agent=$(omarchy-default-agent)
+if [[ -z $agent ]]; then
+  # Omarchy ships without a default; offer the choice instead of doing nothing.
+  exec omarchy-menu summon setup.default.agent
+fi
+if omarchy-cmd-missing "$agent"; then
+  notify "$agent (the Omarchy default agent) isn't installed. Choose another with: omarchy default agent <name>"
+  exit 1
+fi
 
 # Agents keep sessions per directory; run where Omarchy's launcher does, so the
 # folder is trusted and sessions land in one place.
 work_dir=$HOME
 [[ -d $HOME/Work ]] && work_dir=$HOME/Work
-projects=$HOME/.claude/projects/$(sed 's|[/.]|-|g' <<<"$work_dir")
+
+# Claude's folder for this directory's sessions: every character other than
+# an ASCII letter or digit becomes "-".
+projects=$claude_dir/projects/$(LC_ALL=C sed 's/[^a-zA-Z0-9]/-/g' <<<"$work_dir")
 
 # One instance at a time: a second run while the sidebar is still starting
-# would launch a second agent (on the same session, for Claude).
+# would launch a second agent (on the same session, for Claude). The lock is
+# released while the session menu is open, so a menu that never answers can't
+# lock the keys out.
 mkdir -p "$state_dir"
 exec 9>"$state_dir/lock"
 flock -n 9 || exit 0
 
+windows() {
+  hyprctl clients -j | jq -r --arg c "$class" '.[] | select(.class == $c) | .address'
+}
+
 window_open() {
-  hyprctl clients -j | jq -e --arg c "$class" 'any(.[]; .class == $c)' >/dev/null
+  [[ -n $(windows) ]]
 }
 
 # Fails (and says so) if the window won't close, so callers don't switch
 # sessions and launch a second sidebar next to it.
 close_window() {
-  window_open || return 0
-  hyprctl dispatch "hl.dsp.window.close({ window = \"class:^${class//./\\\\.}\$\" })" >/dev/null
+  local address
+  for address in $(windows); do
+    hyprctl dispatch "hl.dsp.window.close({ window = \"address:$address\" })" >/dev/null
+  done
   for _ in {1..30}; do window_open || return 0; sleep 0.1; done
-  notify-send "Agent sidebar" "The sidebar didn't close; leaving it as is"
+  notify "The sidebar didn't close; leaving it as is"
   return 1
 }
 
+valid_uuid() {
+  [[ $1 =~ ^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$ ]]
+}
+
 new_session() {
-  uuidgen >"$state_dir/session-id"
+  local id
+  id=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
+  echo "${id,,}" >"$state_dir/session-id"
   date '+%Y-%m-%d %H:%M' >"$state_dir/session-name"
 }
 
-# Lists Claude sidebar sessions (timestamp-named), newest first, as a searchable
-# menu and sets picked_id/picked_name. Returns 1 if nothing was picked.
+# Claude's transcript for a session, wherever Claude filed it.
+transcript() {
+  local found=("$claude_dir"/projects/*/"$1".jsonl)
+  [[ -f ${found[0]} ]] && echo "${found[0]}"
+}
+
+# Lists the newest sidebar sessions (timestamp-named) as a searchable menu and
+# sets picked_id/picked_name. Returns 1 if nothing was picked.
 pick_session() {
-  local current f id title prompt key choice
+  local current f id title prompt key choice count=0
   local -A ids=()
   local options=()
   current=$(cat "$state_dir/session-id" 2>/dev/null)
 
   while IFS= read -r f; do
-    title=$(grep -h '"type":"custom-title"' "$f" | tail -1 | jq -r .customTitle)
+    title=$(grep -h '"type":"custom-title"' "$f" | tail -1 | jq -r '.customTitle // empty' 2>/dev/null)
     [[ $title =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
     id=$(basename "$f" .jsonl)
-    # Every prompt typed in the session, newest first: the menu shows the start
-    # of this line but searches all of it, so any past question finds it.
-    prompt=$(jq -rs '[.[] | select(.type == "user" and .isMeta != true and (.message.content | type) == "string")
-                      | .message.content | select(startswith("<") | not) | gsub("\\s+"; " ")]
-                     | reverse | join(" · ") | .[0:2000]' "$f" 2>/dev/null)
+    # The session's typed prompts, newest first: the menu shows the start of
+    # this line and searches all of it. Lines that don't parse (one being
+    # written right now) are skipped rather than failing the whole file.
+    prompt=$(jq -nrR '[inputs | fromjson? | select(.type == "user" and .isMeta != true and (.message.content | type) == "string")
+                       | .message.content | select(startswith("<") | not) | gsub("\\s+"; " ")]
+                      | reverse | join(" · ") | .[0:500]' "$f" 2>/dev/null)
     [[ $id == "$current" ]] && prompt="(current) $prompt"
     key="$title"$'\t'"$prompt"
+    # Same minute, same prompts: tell them apart.
+    [[ -n ${ids[$key]:-} ]] && key+=" · ${id:0:8}"
     ids[$key]=$id
     options+=("󰍩"$'\t'"$key")
+    # The menu receives every option in a single argument, which has a size limit.
+    ((++count >= 50)) && break
   done < <(ls -t "$projects"/*.jsonl 2>/dev/null)
 
   if ((${#options[@]} == 0)); then
-    notify-send "Agent sidebar" "No saved sidebar sessions yet"
+    notify "No saved sidebar sessions yet"
     return 1
   fi
 
-  choice=$(omarchy-menu-select "Claude sessions" "${options[@]}" -- --width 600 --maxheight 600) || return 1
+  flock -u 9
+  choice=$(timeout 600 omarchy-menu-select "Claude sessions" "${options[@]}" -- --width 600 --maxheight 600 9>&-) || return 1
+  flock -w 5 9 || return 1
   [[ -n $choice && -n ${ids[$choice]:-} ]] || return 1
   picked_id=${ids[$choice]}
   picked_name=${choice%%$'\t'*}
 }
-
-if [[ -z $agent ]]; then
-  # Omarchy ships without a default; offer the choice instead of doing nothing.
-  exec omarchy-menu summon setup.default.agent
-fi
 
 case ${1:-launch} in
 launch)
@@ -97,7 +144,7 @@ new)
   ;;
 load)
   if [[ $agent != claude ]]; then
-    notify-send "Agent sidebar" "Saved sessions are only available with Claude Code"
+    notify "Saved sessions are only available with Claude Code"
     exit 0
   fi
   pick_session || exit 0
@@ -118,14 +165,22 @@ esac
 cd "$work_dir" || exit 1
 
 if [[ $agent == claude ]]; then
-  [[ -s $state_dir/session-id ]] || new_session
-  session=$(<"$state_dir/session-id")
+  session=$(cat "$state_dir/session-id" 2>/dev/null)
+  if ! valid_uuid "$session"; then
+    new_session
+    session=$(<"$state_dir/session-id")
+  fi
   name=$(cat "$state_dir/session-name" 2>/dev/null)
   [[ -n $name ]] || name=$(date '+%Y-%m-%d %H:%M')
 
-  # A session with no messages has no transcript yet and can't be resumed.
-  if [[ -f $projects/$session.jsonl ]]; then
+  # Only a session with a message in it can be resumed; one with none yet
+  # starts under the same id.
+  file=$(transcript "$session")
+  if [[ -n $file ]] && grep -q '"type":"user"' "$file"; then
     command=(claude --resume "$session")
+  elif [[ -n $file ]]; then
+    new_session
+    command=(claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")")
   else
     command=(claude --session-id "$session" --name "$name")
   fi
@@ -133,6 +188,8 @@ else
   command=(omarchy-agent --inline)
 fi
 
-# Hold the lock until the window exists; the terminal mustn't inherit it.
+# Hold the lock until the window exists (cold starts can be slow); the terminal
+# mustn't inherit it.
 omarchy-launch-tui --app-id="$class" "${command[@]}" 9>&- &
-for _ in {1..50}; do window_open && break; sleep 0.1; done
+for _ in {1..150}; do window_open && exit 0; sleep 0.1; done
+notify "The agent didn't open; try running it with SUPER + SHIFT + CTRL + A to see why"
