@@ -88,7 +88,7 @@ end
 local defaults = {
   margin = 24, -- gap to the screen edges and bar
   width = 0.33, -- default width as a share of the monitor
-  dim = true, -- dim the rest of the screen while the sidebar shows
+  dim = true, -- dim the rest of the screen more while a sidebar shows
   -- The sidebar's border colour: "theme" (the theme's foreground colour), a
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", or false for the usual border.
   border = "theme",
@@ -337,8 +337,25 @@ local function showing(window)
   return in_sidebar(window) and shown_sidebar(window.monitor) == window.workspace.name
 end
 
+-- The dim behind the sidebar is Hyprland's dim_special (which dims everything
+-- behind a shown special workspace), raised while a sidebar shows. It crossfades
+-- smoothly between sidebars, where a dim on each window doubled up for a moment
+-- and then vanished in one frame. Hyprland takes the value when a special
+-- workspace appears, so it is raised just before a sidebar shows and set back
+-- to Omarchy's once something else shows (or nothing), for the scratchpad.
+local base_dim = tonumber(hl.get_config("decoration:dim_special")) or 0.2
+local special_dim = base_dim
+local function dim_behind(sidebar)
+  local value = (sidebar and config.dim) and (1 - (1 - base_dim) * 0.6) or base_dim
+  if value ~= special_dim then
+    hl.config({ decoration = { dim_special = value } })
+    special_dim = value
+  end
+end
+
 -- Shows or hides a sidebar workspace on the active monitor.
 local function toggle_workspace(name)
+  dim_behind(true)
   hl.dispatch(hl.dsp.workspace.toggle_special(name:sub(#"special:" + 1)))
 end
 
@@ -603,7 +620,7 @@ local function enter(window, opened)
   if not window.floating then
     dispatch_for(window, hl.dsp.window.float, { action = "toggle" })
   end
-  set_dim(window, config.dim)
+  set_dim(window, false) -- dimmed by the window before 0.3.1
   style(window)
 
   -- Dock once floating has settled, or Hyprland restores the window's old
@@ -797,7 +814,7 @@ do
   local shown = shown_sidebar()
   for _, w in ipairs(inside) do
     members[w.address] = next_sequence()
-    set_dim(w, config.dim)
+    set_dim(w, false)
     if sidebar_border then
       style(w)
     else
@@ -819,7 +836,8 @@ do
   for _, w in ipairs(hl.get_workspace_windows(LEGACY_WORKSPACE) or {}) do
     dispatch_for(w, hl.dsp.window.move, { workspace = free_workspace(), follow = false })
     enter(w)
-  end
+  end  -- For the next sidebar to show (a sidebar already showing keeps its dim).
+  dim_behind(shown ~= nil)
 end
 
 -- Windows that left the sidebar earlier: the current theme's border colours
@@ -870,6 +888,7 @@ hl.on("workspace.special_active", guard("showing the sidebar", function()
       end
     end
   end
+  dim_behind(shown ~= nil)
   sync_keys()
 end))
 
@@ -1005,6 +1024,7 @@ local function make_sidebar(window)
     if window.pinned then
       dispatch_for(window, hl.dsp.window.pin, {})
     end
+    dim_behind(true)
     dispatch_for(window, hl.dsp.window.move, { workspace = free_workspace() })
   end
 end
@@ -1092,6 +1112,7 @@ bind(config.sidebar.convert, "Window to/from sidebar", convert)
 if agent_class then
   local script = dir .. "/bin/agent-sidebar"
   local function run(command)
+    dim_behind(true) -- the agent's window rule opens it into a sidebar
     hl.exec_cmd("SIDEBAR_AGENT_CLASS=" .. quote(agent_class) .. " " .. quote(script) .. " " .. command)
   end
 
