@@ -887,6 +887,10 @@ local function make_sidebar(window)
     end
     focus(window)
   else
+    -- Hyprland won't move a pinned window (SUPER + O pins) off its workspace.
+    if window.pinned then
+      dispatch_for(window, hl.dsp.window.pin, {})
+    end
     dispatch_for(window, hl.dsp.window.move, { workspace = WORKSPACE })
   end
 end
