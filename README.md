@@ -1,14 +1,14 @@
 # Omarchy Sidebar
 
-Turn any window into the **sidebar**: docked to the left or right screen edge,
+Turn any window into a **sidebar**: docked to the left or right screen edge,
 floating over your workspace, dimming everything behind it, and shown or hidden
-with one key. One key also makes your Omarchy default coding agent the sidebar,
+with one key. One key also makes your Omarchy default coding agent a sidebar,
 with saved, searchable sessions when that agent is Claude Code.
 
-There is only ever one sidebar: making a window the sidebar (including the
-agent) sends the previous one back to your workspace as a normal window. Its
-border uses your theme's foreground colour, so it's easy to tell apart from
-normal windows wherever it is.
+You can have several sidebars, one showing at a time: `Super + B` cycles
+through them, each replacing the one before. A sidebar's border uses your
+theme's foreground colour, so it's easy to tell apart from normal windows
+wherever it is.
 
 Move a sidebar to a regular workspace and it becomes an ordinary window again,
 following every normal Omarchy binding. Turn it back into a sidebar any time.
@@ -31,9 +31,9 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 
 | Key | Action |
 |---|---|
-| `Super + Alt + B` | Make the focused window the sidebar, or the sidebar a normal window again |
-| `Super + B` | Show/hide the sidebar, whichever window it is |
-| `Super + A` | Make the agent the sidebar and show it (launching it if needed); hide it if it's already showing |
+| `Super + Alt + B` | Make the focused window a sidebar, or a sidebar a normal window again |
+| `Super + B` | Show the sidebar you used last; while one shows, the next one (in the order you added them, wrapping round). With just one, show/hide it |
+| `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
 | `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default docked spot and size |
@@ -49,6 +49,7 @@ Inside a sidebar that has focus:
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
 
 A hidden sidebar is still there: `Super + B` (or `Super + A`) brings it back.
+`Super + Escape` or a click outside hides whichever sidebar is showing.
 
 Plain `Escape` always reaches the app in the sidebar. While a sidebar has
 focus, `Super + Escape` hides it instead of opening Omarchy's system menu (hide
@@ -115,8 +116,8 @@ It runs your Omarchy default coding agent, set with
 chooser (which starts the chosen agent in a normal window; press `Super + A`
 again for the sidebar). Agents start through Omarchy's own launcher, exactly as
 `Super + Shift + Ctrl + A` starts them; `Super + Shift + A` closes the running
-one and starts it fresh, without asking. Like any sidebar, the agent replaces
-whatever window was the sidebar, which goes back to your workspace.
+one and starts it fresh, without asking. The agent is one of your sidebars:
+`Super + B` cycles through it with the others.
 
 Claude Code is the exception, because Omarchy's launcher can't pass it session
 options: Claude is run directly, pinned to one session, so closing the sidebar

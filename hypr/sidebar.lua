@@ -1,19 +1,22 @@
 -- Omarchy Sidebar
 --
--- The sidebar is one window docked to the left or right screen edge on its own
--- special workspace: floating, dimming the rest of the screen, shown and hidden
--- with a key. There is only ever one: making a window the sidebar sends the
--- previous one back to your workspace as a normal window. Move the sidebar to a
--- regular workspace (SUPER + SHIFT + <n>) and it is an ordinary window again,
--- following every normal Omarchy binding.
+-- A sidebar is a window docked to the left or right screen edge on its own
+-- special workspace (special:sidebar, special:sidebar2, ...): floating, dimming
+-- the rest of the screen, shown and hidden with a key. There can be several, but
+-- only one shows at a time: a monitor shows one special workspace, so showing a
+-- sidebar hides the one before. Move a sidebar to a regular workspace
+-- (SUPER + SHIFT + <n>) and it is an ordinary window again, following every
+-- normal Omarchy binding.
 --
---   SUPER + ALT + B  the focused window becomes the sidebar (or the sidebar
+--   SUPER + ALT + B  the focused window becomes a sidebar (or a sidebar
 --                    becomes a normal window again)
---   SUPER + B        show/hide the sidebar
+--   SUPER + B        show the sidebar last shown; while one shows, the next
+--                    (in the order they were added, wrapping round), or hide it
+--                    if it's the only one
 --   SUPER + A        the agent sidebar: your Omarchy default coding agent
---                    (`omarchy default agent`) becomes the sidebar, launched if
---                    needed; with Claude Code it also keeps saved, searchable
---                    sessions (see bin/agent-sidebar)
+--                    (`omarchy default agent`) becomes a sidebar and shows,
+--                    launched if needed; with Claude Code it also keeps saved,
+--                    searchable sessions (see bin/agent-sidebar)
 --
 -- In the sidebar, SUPER + SHIFT + LEFT/RIGHT docks it to that edge (remembered
 -- separately for the agent and for other windows) and Omarchy's resize keys
@@ -44,9 +47,13 @@ end
 local state_root = state_home .. "/omarchy-sidebar"
 local quote = o.shell_quote
 
+-- The first sidebar's workspace; more are special:sidebar2, special:sidebar3...
 local WORKSPACE = "special:sidebar"
-local SPECIAL = "sidebar" -- the name toggle_special takes
 local LEGACY_WORKSPACE = "special:agent" -- the agent's own slot before 0.2
+
+local function is_sidebar_workspace(name)
+  return name ~= nil and name:match("^special:sidebar%d*$") ~= nil
+end
 
 -- Reporting --------------------------------------------------------------------
 
@@ -251,11 +258,19 @@ end
 
 -- Windows ---------------------------------------------------------------------
 
--- The sidebar window(s) by address, so a window leaving the sidebar can be told
+-- The sidebar windows by address, so a window leaving a sidebar can be told
 -- apart from an ordinary window moving between workspaces, and whether each was
--- floating before, to put it back that way.
+-- floating before, to put it back that way. Each member's value is a sequence
+-- number: SUPER + B cycles through them in the order they were added.
 local members = {}
 local was_floating = {}
+local sequence = 0
+local function next_sequence()
+  sequence = sequence + 1
+  return sequence
+end
+-- The sidebar shown last (by address), for SUPER + B to bring back.
+local last_shown = nil
 
 local function selector(window)
   return "address:" .. window.address
@@ -285,22 +300,70 @@ local function regular_workspace(monitor)
   return monitor and monitor.active_workspace
 end
 
+-- The windows in every sidebar workspace.
 local function sidebar_windows()
-  return hl.get_workspace_windows(WORKSPACE) or {}
+  local inside = {}
+  for _, w in ipairs(hl.get_windows()) do
+    if w.workspace and is_sidebar_workspace(w.workspace.name) then
+      inside[#inside + 1] = w
+    end
+  end
+  return inside
 end
 
 local function in_sidebar(window)
-  return window ~= nil and window.workspace ~= nil and window.workspace.name == WORKSPACE
+  return window ~= nil and window.workspace ~= nil and is_sidebar_workspace(window.workspace.name)
 end
 
 local function is_member(window)
-  return in_sidebar(window) and members[window.address] == true
+  return in_sidebar(window) and members[window.address] ~= nil
+end
+
+-- The sidebar workspace the monitor shows, or nil.
+local function shown_sidebar(monitor)
+  monitor = monitor or hl.get_active_monitor()
+  local shown = monitor and monitor.active_special_workspace
+  if shown ~= nil and is_sidebar_workspace(shown.name) then
+    return shown.name
+  end
 end
 
 local function sidebar_shown(monitor)
-  monitor = monitor or hl.get_active_monitor()
-  local shown = monitor and monitor.active_special_workspace
-  return shown ~= nil and shown.name == WORKSPACE
+  return shown_sidebar(monitor) ~= nil
+end
+
+-- Whether the window's own sidebar is the one on screen.
+local function showing(window)
+  return in_sidebar(window) and shown_sidebar(window.monitor) == window.workspace.name
+end
+
+-- Shows or hides a sidebar workspace on the active monitor.
+local function toggle_workspace(name)
+  hl.dispatch(hl.dsp.workspace.toggle_special(name:sub(#"special:" + 1)))
+end
+
+-- Hides the sidebar on the active monitor, if one shows.
+local function hide_shown()
+  local shown = shown_sidebar()
+  if shown then
+    toggle_workspace(shown)
+  end
+end
+
+-- A sidebar workspace with no window in it.
+local function free_workspace()
+  local used = {}
+  for _, w in ipairs(sidebar_windows()) do
+    used[w.workspace.name] = true
+  end
+  if not used[WORKSPACE] then
+    return WORKSPACE
+  end
+  local n = 2
+  while used[WORKSPACE .. n] do
+    n = n + 1
+  end
+  return WORKSPACE .. n
 end
 
 local function focus(window)
@@ -351,9 +414,9 @@ local function area(m)
   }
 end
 
--- The monitor the sidebar was last docked on, to re-dock it when it's shown on
+-- The monitor each sidebar was last docked on, to re-dock it when it's shown on
 -- another one.
-local docked_monitor = nil
+local docked_on = {}
 
 -- Docks the window to its edge at the given size (clamped to the monitor),
 -- keeping the given top edge, or the top of the usable area.
@@ -370,7 +433,7 @@ local function dock(window, width, height, top)
 
   dispatch_for(window, hl.dsp.window.resize, { x = width, y = height })
   dispatch_for(window, hl.dsp.window.move, { x = x, y = top })
-  docked_monitor = window.monitor.id
+  docked_on[window.address] = window.monitor.id
 end
 
 local function dock_default(window)
@@ -459,17 +522,19 @@ local function unstyle(window)
   remember_restored(window.address)
 end
 
--- Hides the sidebar if it is on screen and `leaving` was the last window in it.
+-- Hides the sidebar on screen if `leaving` was the last window in it.
 local function hide_if_empty(leaving)
-  for _, w in ipairs(sidebar_windows()) do
+  -- The dispatcher acts on the active monitor; showing it elsewhere is left be.
+  local shown = shown_sidebar(hl.get_active_monitor())
+  if shown == nil then
+    return
+  end
+  for _, w in ipairs(hl.get_workspace_windows(shown) or {}) do
     if w.address ~= leaving then
       return
     end
   end
-  -- The dispatcher acts on the active monitor; showing it elsewhere is left be.
-  if sidebar_shown(hl.get_active_monitor()) then
-    hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
-  end
+  toggle_workspace(shown)
 end
 
 local function leave(window)
@@ -489,10 +554,10 @@ local function leave(window)
   sync_keys()
 end
 
--- Sends a window in the sidebar workspace back to the regular workspace on its
+-- Sends a window in a sidebar workspace back to the regular workspace on its
 -- monitor as a normal window. Leaving is done here rather than left to the move
 -- event: Hyprland doesn't deliver events caused from inside another event's
--- handler, which is where a replaced sidebar is usually evicted from.
+-- handler, which is where a stray window is usually evicted from.
 local function evict(window)
   local regular = regular_workspace(window.monitor)
   if regular == nil then
@@ -510,17 +575,25 @@ end
 -- `opened` is true for a window that opened straight into the sidebar (the
 -- agent): it has no earlier state, so it leaves as a normal tiled window.
 local function enter(window, opened)
-  -- Only one sidebar: anything else in it goes back to the workspace.
-  for _, other in ipairs(sidebar_windows()) do
-    if other.address ~= window.address then
-      evict(other)
+  window = current(window.address) or window
+  -- One window per sidebar workspace: another sidebar already in this one
+  -- moves to a workspace of its own, anything else back to the workspace.
+  if window.workspace then
+    for _, other in ipairs(hl.get_workspace_windows(window.workspace.name) or {}) do
+      if other.address ~= window.address then
+        if members[other.address] then
+          dispatch_for(other, hl.dsp.window.move, { workspace = free_workspace(), follow = false })
+        else
+          evict(other)
+        end
+      end
     end
   end
 
   if members[window.address] == nil then
     was_floating[window.address] = not opened and window.floating == true
+    members[window.address] = next_sequence()
   end
-  members[window.address] = true
   if window.pinned then
     dispatch_for(window, hl.dsp.window.pin, {})
   end
@@ -620,7 +693,7 @@ end
 -- dispatcher toggles, so hiding twice would show it again).
 local function hide_on_outside_click()
   local window = hl.get_active_window()
-  if not is_member(window) or not sidebar_shown(window.monitor) or keyboard_layer_open() then
+  if not is_member(window) or not showing(window) or keyboard_layer_open() then
     return
   end
   local p = hl.get_cursor_pos()
@@ -647,8 +720,9 @@ local function hide_on_outside_click()
   local monitor_id = window.monitor.id
   hl.timer(guard("hiding the sidebar", function()
     local m = hl.get_active_monitor()
-    if m and m.id == monitor_id and sidebar_shown(m) then
-      hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
+    local shown = m and m.id == monitor_id and shown_sidebar(m)
+    if shown then
+      toggle_workspace(shown)
       sync_keys()
     end
   end), { timeout = 30, type = "oneshot" })
@@ -665,13 +739,13 @@ local sidebar_keys = false
 local click_bound = false
 function sync_keys()
   local window = hl.get_active_window()
-  local visible = is_member(window) and sidebar_shown(window.monitor) and not keyboard_layer_open()
+  local visible = is_member(window) and showing(window) and not keyboard_layer_open()
 
   local want_escape = visible and config[kind(window)].escape
   if want_escape ~= escape_bound then
     if want_escape then
       hl.unbind(HIDE_KEY)
-      hl.bind(HIDE_KEY, hl.dsp.workspace.toggle_special(SPECIAL), { description = "Hide sidebar" })
+      hl.bind(HIDE_KEY, guard("hiding the sidebar", hide_shown), { description = "Hide sidebar" })
     else
       hl.unbind(HIDE_KEY)
       if omarchy_default_bindings ~= false then
@@ -707,44 +781,44 @@ end
 
 -- Loading -----------------------------------------------------------------------
 
--- Windows already in the sidebar when this loads (e.g. after a config reload).
--- Only one stays: the focused one, else the first.
+-- Windows already in sidebars when this loads (e.g. after a config reload),
+-- in workspace order. Each gets a workspace of its own (before 0.3 there was
+-- one, and a reload could find several windows in it). The moves' events fire
+-- before the handlers below are registered, so nothing else sees them.
 do
   local inside = sidebar_windows()
-  local keep = inside[1]
-  local active = hl.get_active_window()
-  for _, w in ipairs(inside) do
-    if active and w.address == active.address then
-      keep = w
-    end
+  local function number(w)
+    return tonumber(w.workspace.name:match("(%d+)$")) or 1
   end
+  table.sort(inside, function(a, b)
+    return number(a) < number(b)
+  end)
+  local taken = {}
+  local shown = shown_sidebar()
   for _, w in ipairs(inside) do
-    if w == keep then
-      members[w.address] = true
-      set_dim(w, config.dim)
-      if sidebar_border then
-        style(w)
-      else
-        unstyle(w)
-      end
-      docked_monitor = w.monitor and w.monitor.id
+    members[w.address] = next_sequence()
+    set_dim(w, config.dim)
+    if sidebar_border then
+      style(w)
     else
-      set_dim(w, false)
-      evict(w)
+      unstyle(w)
+    end
+    docked_on[w.address] = w.monitor and w.monitor.id
+    if taken[w.workspace.name] then
+      local target = free_workspace()
+      dispatch_for(w, hl.dsp.window.move, { workspace = target, follow = false })
+      taken[target] = true
+    else
+      taken[w.workspace.name] = true
+      if w.workspace.name == shown then
+        last_shown = w.address
+      end
     end
   end
   -- Before 0.2 the agent had its own special workspace.
-  -- The move's event fires before the handlers below are registered, so the
-  -- window enters here.
   for _, w in ipairs(hl.get_workspace_windows(LEGACY_WORKSPACE) or {}) do
-    if keep == nil then
-      keep = w
-      dispatch_for(w, hl.dsp.window.move, { workspace = WORKSPACE, follow = false })
-      enter(w)
-    else
-      set_dim(w, false)
-      evict(w)
-    end
+    dispatch_for(w, hl.dsp.window.move, { workspace = free_workspace(), follow = false })
+    enter(w)
   end
 end
 
@@ -783,12 +857,16 @@ hl.on("layer.opened", guard("updating sidebar keys", sync_soon))
 hl.on("layer.closed", guard("updating sidebar keys", sync_soon))
 
 hl.on("workspace.special_active", guard("showing the sidebar", function()
-  -- Shown on another monitor than it was docked on: dock it there.
   local monitor = hl.get_active_monitor()
-  if monitor and sidebar_shown(monitor) and docked_monitor ~= nil and docked_monitor ~= monitor.id then
-    for _, w in ipairs(sidebar_windows()) do
-      if members[w.address] and w.floating then
-        dock_default(w)
+  local shown = monitor and shown_sidebar(monitor)
+  if shown then
+    for _, w in ipairs(hl.get_workspace_windows(shown) or {}) do
+      if members[w.address] then
+        last_shown = w.address
+        -- Shown on another monitor than it was docked on: dock it there.
+        if w.floating and docked_on[w.address] ~= nil and docked_on[w.address] ~= monitor.id then
+          dock_default(w)
+        end
       end
     end
   end
@@ -820,6 +898,7 @@ hl.on("window.close", guard("closing a window", function(window)
   if address then
     members[address] = nil
     was_floating[address] = nil
+    docked_on[address] = nil
   end
   sync_soon()
 end))
@@ -828,7 +907,7 @@ hl.on("window.move_to_workspace", guard("moving a window", function(window, work
   if window == nil or workspace == nil then
     return
   end
-  if workspace.name == WORKSPACE then
+  if is_sidebar_workspace(workspace.name) then
     enter(window)
   elseif members[window.address] then
     leave(window)
@@ -837,14 +916,39 @@ end))
 
 -- Actions -------------------------------------------------------------------------
 
-local function sidebar_window()
-  local inside = sidebar_windows()
-  for _, w in ipairs(inside) do
-    if members[w.address] then
+-- The sidebars in the order they were added. A window in a sidebar workspace
+-- that isn't one yet (left there by something else) becomes one.
+local function sidebar_list()
+  local list = {}
+  for _, w in ipairs(sidebar_windows()) do
+    if members[w.address] == nil then
+      enter(w)
+    end
+    list[#list + 1] = w
+  end
+  table.sort(list, function(a, b)
+    return members[a.address] < members[b.address]
+  end)
+  return list
+end
+
+-- The sidebar shown last, else the first.
+local function last_sidebar(list)
+  for _, w in ipairs(list) do
+    if w.address == last_shown then
       return w
     end
   end
-  return inside[1]
+  return list[1]
+end
+
+-- Shows the window's sidebar (hiding any other) and focuses it.
+local function show(window)
+  if shown_sidebar() ~= window.workspace.name then
+    toggle_workspace(window.workspace.name)
+  end
+  last_shown = window.address
+  focus(window)
 end
 
 local function agent_window()
@@ -858,10 +962,11 @@ local function agent_window()
   end
 end
 
--- Show/hide the sidebar, whichever window it is.
+-- SUPER + B: hidden, the sidebar shown last comes back. Shown, the next one
+-- comes in its place (wrapping round), or it hides if it's the only one.
 local function toggle()
-  local window = sidebar_window()
-  if window == nil then
+  local list = sidebar_list()
+  if #list == 0 then
     if config.sidebar.convert then
       notify("No sidebar yet: focus a window and press " .. config.sidebar.convert)
     else
@@ -869,43 +974,51 @@ local function toggle()
     end
     return
   end
-  if not members[window.address] then
-    enter(window)
+  local shown = shown_sidebar()
+  if shown == nil then
+    show(last_sidebar(list))
+    return
   end
-  hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
+  local at = 0
+  for i, w in ipairs(list) do
+    if w.workspace.name == shown then
+      at = i
+    end
+  end
+  if #list == 1 and at == 1 then
+    toggle_workspace(shown)
+  else
+    show(list[at % #list + 1])
+  end
 end
 
--- Makes the window the sidebar and shows it. Moving it in (following it shows
--- the sidebar) sends the previous sidebar back to the workspace.
+-- Makes the window a sidebar and shows it. A window that isn't one yet moves to
+-- a sidebar workspace of its own (following it shows it).
 local function make_sidebar(window)
   if in_sidebar(window) then
     if not members[window.address] then
       enter(window)
     end
-    if not sidebar_shown(window.monitor) then
-      hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
-    end
-    focus(window)
+    show(window)
   else
     -- Hyprland won't move a pinned window (SUPER + O pins) off its workspace.
     if window.pinned then
       dispatch_for(window, hl.dsp.window.pin, {})
     end
-    dispatch_for(window, hl.dsp.window.move, { workspace = WORKSPACE })
+    dispatch_for(window, hl.dsp.window.move, { workspace = free_workspace() })
   end
 end
 
--- SUPER + A: the agent is the sidebar. Already the shown sidebar: hide it.
--- Anywhere else (hidden, on a workspace, or another window is the sidebar): it
--- becomes the sidebar, shown. Not running: launch it (its window rule puts it
--- in the sidebar).
+-- SUPER + A: the agent sidebar. Already showing: hide it. Anywhere else
+-- (hidden, on a workspace, or another sidebar showing): it becomes a sidebar
+-- and shows. Not running: launch it (its window rule puts it in a sidebar).
 local launch_agent
 local function toggle_agent()
   local window = agent_window()
   if window == nil then
     launch_agent()
-  elseif in_sidebar(window) and sidebar_shown(window.monitor) then
-    hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
+  elseif showing(window) then
+    toggle_workspace(window.workspace.name)
   else
     make_sidebar(window)
   end
@@ -929,10 +1042,7 @@ local function reset_agent()
   end
   if is_member(window) then
     enter(window)
-    if not sidebar_shown(window.monitor) then
-      hl.dispatch(hl.dsp.workspace.toggle_special(SPECIAL))
-    end
-    focus(window)
+    show(window)
   else
     make_sidebar(window)
   end
@@ -959,10 +1069,11 @@ end
 -- When the plugin unloads: the sidebar back to its monitor's workspace as a
 -- normal window, so it isn't left hidden with no key to show it.
 local function release()
-  for _, name in ipairs({ WORKSPACE, LEGACY_WORKSPACE }) do
-    for _, w in ipairs(hl.get_workspace_windows(name) or {}) do
-      evict(w)
-    end
+  for _, w in ipairs(sidebar_windows()) do
+    evict(w)
+  end
+  for _, w in ipairs(hl.get_workspace_windows(LEGACY_WORKSPACE) or {}) do
+    evict(w)
   end
 end
 
@@ -1034,9 +1145,9 @@ sidebar = {
     if name == "agent" then
       return show_agent()
     end
-    local window = sidebar_window()
+    local window = last_sidebar(sidebar_list())
     if window then
-      make_sidebar(window)
+      show(window)
       return true
     end
     return false
