@@ -42,7 +42,7 @@ Inside a sidebar that has focus:
 
 | Key | Action |
 |---|---|
-| `Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
+| `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
 | `Super + Shift + Left/Right` | Dock it to that edge, keeping its size (the side is remembered, separately for the agent and other windows) |
 | `Super + Minus / Equal` | Wider / narrower, staying docked (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Minus / Equal` | Shorter / taller; the top edge stays put |
@@ -50,9 +50,9 @@ Inside a sidebar that has focus:
 
 A hidden sidebar is still there: `Super + B` (or `Super + A`) brings it back.
 
-While a sidebar has focus, `Escape` doesn't reach the app in it (a browser's
-find bar or fullscreen video, or Claude's interrupt: use `Ctrl + C` in Claude,
-or turn Escape off per sidebar in the config). Clicks on the bar, its panels,
+Plain `Escape` always reaches the app in the sidebar. While a sidebar has
+focus, `Super + Escape` hides it instead of opening Omarchy's system menu (hide
+the sidebar first, or turn this off per sidebar in the config). Clicks on the bar, its panels,
 menus and notifications don't hide a sidebar; neither do keys or clicks while a
 launcher, menu or screenshot selector is open. A click on an app's own menu
 that reaches past the sidebar's edge counts as outside it and hides it.
@@ -65,14 +65,14 @@ rule had given it; they follow theme changes while the plugin is installed.
 
 - `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
   replaces whatever was bound to that key before.
-- While a sidebar has focus, the plugin takes over plain `Escape`, plain left
-  click, and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and
+- While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
+  system menu), plain left click, and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and
   swap (`Super + Shift + arrows`) keys. Everywhere else those are Omarchy's own
   bindings: they start out untouched, and after a sidebar has had focus they
-  are re-bound exactly as Omarchy defines them. So if you've customised those
-  resize or swap keys (or bound plain `Escape` or left click yourself), your
+  are re-bound exactly as Omarchy defines them. So if you've customised the
+  system menu, resize or swap keys (or bound plain left click yourself), your
   version is replaced by Omarchy's until Hyprland reloads. With
-  `omarchy_default_bindings = false` the resize and swap keys are left alone.
+  `omarchy_default_bindings = false` Omarchy's keys are left alone.
 
 ## Configure
 
@@ -90,7 +90,7 @@ return {
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
-    escape = true,       -- Escape hides it (false: Escape reaches the app)
+    escape = true,       -- Super + Escape hides it (false: it opens the system menu)
   },
   agent = {
     enabled = true,      -- false leaves out the agent sidebar
@@ -99,7 +99,7 @@ return {
     new = "SUPER + SHIFT + A", -- false keeps Omarchy's ChatGPT key
     load = "SUPER + ALT + A",
     reset = "SUPER + CTRL + ALT + A",
-    escape = true,       -- false: Escape reaches the agent (e.g. Claude's interrupt)
+    escape = true,       -- Super + Escape hides it (false: it opens the system menu)
   },
 }
 ```

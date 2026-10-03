@@ -89,7 +89,7 @@ local defaults = {
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
-    escape = true, -- ESCAPE hides it (the app in it then doesn't get ESCAPE)
+    escape = true, -- SUPER + ESCAPE hides it (instead of opening the system menu)
   },
   agent = {
     enabled = true,
@@ -125,6 +125,12 @@ local swap_keys = {
   { "SUPER + SHIFT + UP", "Swap window up", "u" },
   { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
 }
+
+-- Hides the focused sidebar. Omarchy binds it to the system menu
+-- (default/hypr/bindings/utilities.lua); that comes back whenever the sidebar
+-- doesn't have focus.
+local HIDE_KEY = "SUPER + ESCAPE"
+local SYSTEM_MENU = "omarchy-menu toggle system"
 
 local key_options = {
   [""] = { border = true },
@@ -205,7 +211,7 @@ do
     parts[#parts + 1] = key
     return table.concat(parts, "+")
   end
-  local seen = { [normalise("ESCAPE")] = "Escape (hides the sidebar)" }
+  local seen = { [normalise(HIDE_KEY)] = "Super + Escape (hides the sidebar)" }
   for _, k in ipairs(resize_keys) do
     seen[normalise(k[1])] = "Omarchy's resize keys"
   end
@@ -649,11 +655,11 @@ local function hide_on_outside_click()
 end
 
 -- While the visible sidebar has focus (and no launcher or menu has the
--- keyboard): ESCAPE hides it if allowed for its kind, a click outside hides it,
--- and the resize/swap keys are the sidebar versions. Otherwise ESCAPE and the
--- click are unbound (this owns plain ESCAPE and plain left click: any other
--- such binding is dropped) and Omarchy's resize/swap keys are in place. With
--- `omarchy_default_bindings = false` the resize/swap keys are left alone.
+-- keyboard): SUPER + ESCAPE hides it if allowed for its kind, a click outside
+-- hides it, and the resize/swap keys are the sidebar versions. Otherwise the
+-- click is unbound (this owns plain left click: any other such binding is
+-- dropped) and Omarchy's system menu and resize/swap keys are in place. With
+-- `omarchy_default_bindings = false` Omarchy's keys are left alone.
 local escape_bound = false
 local sidebar_keys = false
 local click_bound = false
@@ -664,9 +670,13 @@ function sync_keys()
   local want_escape = visible and config[kind(window)].escape
   if want_escape ~= escape_bound then
     if want_escape then
-      hl.bind("ESCAPE", hl.dsp.workspace.toggle_special(SPECIAL), { description = "Hide sidebar" })
+      hl.unbind(HIDE_KEY)
+      hl.bind(HIDE_KEY, hl.dsp.workspace.toggle_special(SPECIAL), { description = "Hide sidebar" })
     else
-      hl.unbind("ESCAPE")
+      hl.unbind(HIDE_KEY)
+      if omarchy_default_bindings ~= false then
+        o.bind(HIDE_KEY, "System menu", SYSTEM_MENU)
+      end
     end
     escape_bound = want_escape
   end
