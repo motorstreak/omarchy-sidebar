@@ -88,6 +88,7 @@ return {
   dim = true,            -- dim the rest of the screen while a sidebar shows
   border = "theme",      -- sidebar border: "theme" (foreground colour), "#14B9B5", or false
   click_outside = true,  -- clicking outside a sidebar hides it
+  fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -108,6 +109,11 @@ return {
 Any key can be changed or set to `false` to leave it unbound. A key that's
 already bound (for example `SUPER + C`, Omarchy's copy) is replaced. Mistakes
 in the file are shown as a "Sidebar" notification.
+
+`fade = true` swaps Omarchy's vertical slide for a fade, which also crossfades
+from one sidebar to the next. Hyprland has a single animation for every special
+workspace, so the scratchpad fades too, and it replaces any `specialWorkspace`
+animation in your own Hyprland config while the plugin is enabled.
 
 ## The agent sidebar
 

@@ -93,6 +93,10 @@ local defaults = {
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", or false for the usual border.
   border = "theme",
   click_outside = true, -- clicking outside the shown sidebar hides it
+  -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
+  -- one animation for every special workspace, so this fades the scratchpad
+  -- too, and it replaces any specialWorkspace animation in your Hyprland config.
+  fade = false,
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -246,6 +250,12 @@ do
 end
 
 local agent_class = config.agent.enabled and config.agent.class or nil
+
+-- Loaded after your Hyprland config (and again on every reload), so this wins.
+-- Omarchy's speed and curve, with its "slidevert" style swapped for a fade.
+if config.fade then
+  hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint", style = "fade" })
+end
 
 local function is_agent(window)
   return agent_class ~= nil and window ~= nil and window.class == agent_class
