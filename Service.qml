@@ -96,6 +96,8 @@ Item {
 
   Component.onCompleted: load()
 
+  Switcher {}
+
   // The shell destroys services on every plugin rescan and restart, not only
   // when this plugin is disabled. So wait, and unload only if it really is
   // disabled or removed: hand sidebar windows back to the workspace first (or

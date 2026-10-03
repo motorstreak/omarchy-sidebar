@@ -32,7 +32,7 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 | Key | Action |
 |---|---|
 | `Super + Alt + B` | Make the focused window a sidebar, or a sidebar a normal window again |
-| `Super + B` | Show the sidebar you used last; while one shows, the next one (in the order you added them, wrapping round). With just one, show/hide it |
+| `Super + B` | With two or more sidebars: live previews of them all in the middle of the screen. Keep `Super` held and press `B` again to move along; let go of `Super` to show the highlighted one (`Super + Escape` cancels). The first one highlighted is the sidebar you used last, or the next one if a sidebar is showing, so a quick tap works as before. With just one, show/hide it |
 | `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
@@ -89,6 +89,7 @@ return {
   border = "theme",      -- sidebar border: "theme" (foreground colour), "#14B9B5", or false
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
+  switcher = true,       -- false: Super + B cycles sidebars directly, without previews
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",

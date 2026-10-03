@@ -97,6 +97,9 @@ local defaults = {
   -- one animation for every special workspace, so this fades the scratchpad
   -- too, and it replaces any specialWorkspace animation in your Hyprland config.
   fade = false,
+  -- With two or more sidebars, SUPER + B shows live previews of them all in the
+  -- middle of the screen while SUPER is held; false cycles them directly.
+  switcher = true,
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -762,6 +765,7 @@ end
 -- dropped) and Omarchy's system menu and resize/swap keys are in place. With
 -- `omarchy_default_bindings = false` Omarchy's keys are left alone.
 local escape_bound = false
+local switching = false -- the switcher holds HIDE_KEY while it's open
 local sidebar_keys = false
 local click_bound = false
 function sync_keys()
@@ -769,7 +773,7 @@ function sync_keys()
   local visible = is_member(window) and showing(window) and not keyboard_layer_open()
 
   local want_escape = visible and config[kind(window)].escape
-  if want_escape ~= escape_bound then
+  if want_escape ~= escape_bound and not switching then
     if want_escape then
       hl.unbind(HIDE_KEY)
       hl.bind(HIDE_KEY, guard("hiding the sidebar", hide_shown), { description = "Hide sidebar" })
@@ -991,9 +995,114 @@ local function agent_window()
   end
 end
 
+-- Switcher ----------------------------------------------------------------------
+
+-- SUPER + B with two or more sidebars opens the switcher: Service.qml draws a
+-- live preview of each sidebar in the middle of the screen, one highlighted.
+-- Each further B (SUPER still held) highlights the next; letting go of SUPER
+-- shows the highlighted one, and SUPER + ESCAPE closes it without a change.
+-- Every message carries the whole state and a sequence number, as each one is a
+-- separate process and they can arrive out of order.
+--
+-- Letting go of SUPER is watched for by polling: a release binding on SUPER
+-- only fires if SUPER was the last key pressed, and here B came after it.
+local SUPER_KEYS = { "Super_L", "Super_R" }
+local POLL_MS = 20
+local switcher = nil -- { windows, index, seq } while open
+local switcher_seq = 0
+
+local function json_string(value)
+  local escaped = tostring(value):gsub('[%c"\\]', function(c)
+    local named = { ['"'] = '\\"', ["\\"] = "\\\\", ["\n"] = "\\n", ["\t"] = "\\t", ["\r"] = "\\r" }
+    return named[c] or string.format("\\u%04x", c:byte())
+  end)
+  return '"' .. escaped .. '"'
+end
+
+local function switcher_send(method, argument)
+  hl.exec_cmd("omarchy-shell -q sidebar-switcher " .. method .. " " .. quote(argument))
+end
+
+local function switcher_update()
+  switcher_seq = switcher_seq + 1
+  switcher.seq = switcher_seq
+  local items = {}
+  for i, w in ipairs(switcher.windows) do
+    items[i] = string.format('{"address":%s,"title":%s,"width":%d,"height":%d}',
+      json_string(w.address), json_string(w.title or w.class or ""), w.size.x, w.size.y)
+  end
+  local hex = sidebar_border and sidebar_border[1]:match("^rgba%((%x%x%x%x%x%x)")
+  switcher_send("show", string.format('{"seq":%d,"index":%d,"accent":%s,"items":[%s]}',
+    switcher.seq, switcher.index - 1, json_string(hex and ("#" .. hex) or "#ffffff"), table.concat(items, ",")))
+end
+
+local function switcher_close()
+  if switcher == nil then
+    return
+  end
+  hl.unbind(HIDE_KEY)
+  escape_bound = nil -- sync_keys binds HIDE_KEY afresh, whichever way it wants
+  switcher_seq = switcher_seq + 1
+  switcher_send("close", tostring(switcher_seq))
+  switcher = nil
+  switching = false
+  sync_keys()
+end
+
+-- SUPER let go: the highlighted sidebar shows (if it's still one).
+local function switcher_commit()
+  if switcher == nil then
+    return
+  end
+  local chosen = current(switcher.windows[switcher.index].address)
+  switcher_close()
+  if chosen and is_member(chosen) then
+    show(chosen)
+  end
+end
+
+local function super_down()
+  for _, key in ipairs(SUPER_KEYS) do
+    local ok, down = pcall(hl.is_key_down, key)
+    if ok and down then
+      return true
+    end
+  end
+  return false
+end
+
+-- Checks for SUPER let go until this switcher closes (by choice or cancel).
+local function watch_super(open)
+  hl.timer(guard("choosing a sidebar", function()
+    if switcher ~= open then
+      return
+    end
+    if super_down() then
+      watch_super(open)
+    else
+      switcher_commit()
+    end
+  end), { timeout = POLL_MS, type = "oneshot" })
+end
+
+local function switcher_open(list, index)
+  switcher = { windows = list, index = index }
+  switching = true
+  watch_super(switcher)
+  hl.unbind(HIDE_KEY)
+  hl.bind(HIDE_KEY, guard("closing the switcher", switcher_close), { description = "Close the sidebar switcher" })
+  switcher_update()
+end
+
 -- SUPER + B: hidden, the sidebar shown last comes back. Shown, the next one
--- comes in its place (wrapping round), or it hides if it's the only one.
+-- comes in its place (wrapping round), or it hides if it's the only one. With
+-- the switcher, that's the one highlighted first.
 local function toggle()
+  if switcher then
+    switcher.index = switcher.index % #switcher.windows + 1
+    switcher_update()
+    return
+  end
   local list = sidebar_list()
   if #list == 0 then
     if config.sidebar.convert then
@@ -1004,10 +1113,6 @@ local function toggle()
     return
   end
   local shown = shown_sidebar()
-  if shown == nil then
-    show(last_sidebar(list))
-    return
-  end
   local at = 0
   for i, w in ipairs(list) do
     if w.workspace.name == shown then
@@ -1016,8 +1121,21 @@ local function toggle()
   end
   if #list == 1 and at == 1 then
     toggle_workspace(shown)
+    return
+  end
+  local index = at % #list + 1
+  if shown == nil then
+    local last = last_sidebar(list)
+    for i, w in ipairs(list) do
+      if w == last then
+        index = i
+      end
+    end
+  end
+  if config.switcher and #list > 1 then
+    switcher_open(list, index)
   else
-    show(list[at % #list + 1])
+    show(list[index])
   end
 end
 
@@ -1193,4 +1311,7 @@ sidebar = {
   swap = swap,
   resize = resize,
   release = release,
+  -- The switcher's SUPER release and SUPER + ESCAPE, for testing without keys.
+  commit = switcher_commit,
+  cancel = switcher_close,
 }
