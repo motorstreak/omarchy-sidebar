@@ -965,7 +965,8 @@ do
   if f then
     for address in f:lines() do
       local w = current(address)
-      if w and not in_sidebar(w) and not keep[address] then
+      -- Not one pinned since (the Dock plugin gives those their own border).
+      if w and not in_sidebar(w) and not w.pinned and not keep[address] then
         keep[address] = true
         set_border(w, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
       end
@@ -1435,5 +1436,11 @@ sidebar = {
   -- never show (a cancelled menu, a failed start).
   settle = function()
     dim_behind(sidebar_shown())
+  end,
+  -- Whether the sidebar versions of Omarchy's resize, swap and group keys are
+  -- bound now (a sidebar has focus). The Dock plugin, which takes the swap keys
+  -- for pinned windows, checks this before handing them back to Omarchy.
+  keys_taken = function()
+    return sidebar_keys
   end,
 }
