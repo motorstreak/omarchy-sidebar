@@ -13,26 +13,45 @@ Scope {
   id: root
 
   property bool open: false
+  property string session: ""
   property int seq: -1
   property int index: 0
   property var items: []
   property color accent: "white"
 
   // Messages come from separate processes and can arrive out of order: only a
-  // newer one counts.
+  // newer one counts. Each load of sidebar.lua numbers them afresh under a new
+  // session id ("<load time>-<random>"), so a later session's messages always
+  // count, and a straggler from an earlier one never does.
+  function sessionTime(id) {
+    return Number(String(id).split("-")[0]) || 0
+  }
+
+  function newer(messageSession, messageSeq) {
+    if (messageSession !== session) {
+      if (sessionTime(messageSession) < sessionTime(session)) return false
+      session = messageSession
+      seq = messageSeq
+      return true
+    }
+    if (messageSeq <= seq) return false
+    seq = messageSeq
+    return true
+  }
+
   function show(payload) {
     var p = JSON.parse(payload)
-    if (p.seq <= seq) return
-    seq = p.seq
+    if (!newer(String(p.session), p.seq)) return
     items = p.items
     index = p.index
     accent = p.accent || "white"
     open = true
   }
 
-  function close(closeSeq) {
-    if (closeSeq <= seq) return
-    seq = closeSeq
+  // "<session> <seq>"
+  function close(message) {
+    var parts = String(message).split(" ")
+    if (!newer(parts[0], Number(parts[1]))) return
     open = false
   }
 
@@ -49,7 +68,8 @@ Scope {
   IpcHandler {
     target: "sidebar-switcher"
     function show(payload: string): string { root.show(payload); return "ok" }
-    function close(seq: int): string { root.close(seq); return "ok" }
+    function close(message: string): string { root.close(message); return "ok" }
+    function state(): string { return (root.open ? "open" : "closed") + " " + root.session + " " + root.seq }
   }
 
   PanelWindow {

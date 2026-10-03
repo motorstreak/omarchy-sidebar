@@ -1,6 +1,6 @@
 # Omarchy Sidebar
 
-Turn any window into a **sidebar**: docked to the left or right screen edge,
+Turn any window into a **sidebar**: docked by the left or right screen edge,
 floating over your workspace, dimming everything behind it, and shown or hidden
 with one key. One key also makes your Omarchy default coding agent a sidebar,
 with saved, searchable sessions when that agent is Claude Code.
@@ -36,15 +36,16 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 | `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
-| `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default docked spot and size |
+| `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default size, where you last put it |
 
 Inside a sidebar that has focus:
 
 | Key | Action |
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
-| `Super + Shift + Left/Right` | Dock it to that edge, keeping its size (the side is remembered, separately for the agent and other windows) |
-| `Super + Minus / Equal` | Wider / narrower, staying docked (`Alt` small steps, `Ctrl` big steps) |
+| `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent and other windows |
+| `Super + Alt + Left/Right` | Dock it to that screen edge, keeping its size (remembered like a move) |
+| `Super + Minus / Equal` | Wider / narrower, keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Minus / Equal` | Shorter / taller; the top edge stays put |
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
 
@@ -67,11 +68,11 @@ rule had given it; they follow theme changes while the plugin is installed.
 - `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
   replaces whatever was bound to that key before.
 - While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
-  system menu), plain left click, and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`) and
-  swap (`Super + Shift + arrows`) keys. Everywhere else those are Omarchy's own
+  system menu), plain left click, and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
+  swap (`Super + Shift + arrows`) and move-into-group (`Super + Alt + Left/Right`) keys. Everywhere else those are Omarchy's own
   bindings: they start out untouched, and after a sidebar has had focus they
   are re-bound exactly as Omarchy defines them. So if you've customised the
-  system menu, resize or swap keys (or bound plain left click yourself), your
+  system menu, resize, swap or group keys (or bound plain left click yourself), your
   version is replaced by Omarchy's until Hyprland reloads. With
   `omarchy_default_bindings = false` Omarchy's keys are left alone.
 
@@ -148,5 +149,5 @@ Omarchy shell plugins can't ship Hyprland config, so the plugin's service loads
 `hypr/sidebar.lua` into the running Hyprland with `hyprctl eval` at start and
 after every Hyprland config reload; after a plugin update it reloads Hyprland
 once to pick up the new code. Problems are shown as a "Sidebar" notification.
-State (pinned Claude session, remembered sides) lives in
+State (pinned Claude session, remembered places) lives in
 `$XDG_STATE_HOME/omarchy-sidebar/` (normally `~/.local/state`).

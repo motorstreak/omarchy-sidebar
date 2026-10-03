@@ -21,6 +21,14 @@ notify() {
   notify-send -a Sidebar -- "Agent sidebar" "$1" 9>&-
 }
 
+# Starting the agent raises the dim behind sidebars ahead of it showing (see
+# hypr/sidebar.lua). However this ends (a cancelled menu, a failed start, the
+# agent up), have the plugin set it for what actually shows.
+settle() {
+  hyprctl eval 'if sidebar and sidebar.settle then sidebar.settle() end' >/dev/null 2>&1 9>&-
+}
+trap settle EXIT
+
 for cmd in jq flock hyprctl; do
   if ! command -v "$cmd" >/dev/null; then
     notify "Needs $cmd, which isn't installed"
@@ -31,6 +39,7 @@ done
 agent=$(omarchy-default-agent)
 if [[ -z $agent ]]; then
   # Omarchy ships without a default; offer the choice instead of doing nothing.
+  settle
   exec omarchy-menu summon setup.default.agent
 fi
 if omarchy-cmd-missing "$agent"; then
@@ -106,7 +115,9 @@ pick_session() {
   current=$(cat "$state_dir/session-id" 2>/dev/null)
 
   while IFS= read -r f; do
-    title=$(tac "$f" | grep -m1 '"type":"custom-title"' | jq -r '.customTitle // empty' 2>/dev/null)
+    # The last title wins (a session can be renamed). One grep pass over the
+    # file: reversing whole transcripts to find it was slow with large ones.
+    title=$(grep -F '"type":"custom-title"' "$f" | tail -n1 | jq -r '.customTitle // empty' 2>/dev/null)
     [[ $title =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
     # Sessions without a message can't be resumed; leave them out.
     grep -q '"type":"user"' "$f" || continue
@@ -212,11 +223,12 @@ else
   command=(omarchy-agent --inline)
 fi
 
-# Hold the lock until the window exists (cold starts can be slow) and has
-# stayed open a moment, so an agent that fails at once is reported; the
-# terminal mustn't inherit the lock.
+# Hold the lock until the window exists (cold starts can be slow: up to a
+# minute) and has stayed open a moment, so an agent that fails at once is
+# reported, and a second press meanwhile can't start a second agent on the
+# same session; the terminal mustn't inherit the lock.
 omarchy-launch-tui --app-id="$class" "${command[@]}" 9>&- &
-for _ in {1..150}; do
+for _ in {1..600}; do
   if window_open; then
     sleep 1
     window_open && exit 0

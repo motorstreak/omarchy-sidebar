@@ -1,6 +1,6 @@
 -- Omarchy Sidebar
 --
--- A sidebar is a window docked to the left or right screen edge on its own
+-- A sidebar is a window docked by the left or right screen edge on its own
 -- special workspace (special:sidebar, special:sidebar2, ...): floating, dimming
 -- the rest of the screen, shown and hidden with a key. There can be several, but
 -- only one shows at a time: a monitor shows one special workspace, so showing a
@@ -18,9 +18,10 @@
 --                    launched if needed; with Claude Code it also keeps saved,
 --                    searchable sessions (see bin/agent-sidebar)
 --
--- In the sidebar, SUPER + SHIFT + LEFT/RIGHT docks it to that edge (remembered
--- separately for the agent and for other windows) and Omarchy's resize keys
--- resize it while keeping it docked.
+-- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + ALT +
+-- LEFT/RIGHT dock it to that screen edge, and Omarchy's resize
+-- keys resize it from the side nearer a screen edge; where it was put is
+-- remembered separately for the agent and for other windows.
 --
 -- Loaded into the running Hyprland by Service.qml with SIDEBAR_DIR set to the
 -- plugin folder. Keys and options can be overridden in
@@ -139,6 +140,12 @@ local swap_keys = {
   { "SUPER + SHIFT + UP", "Swap window up", "u" },
   { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
 }
+-- Omarchy's keys for moving a window into the group beside it; in the sidebar
+-- they dock it to that screen edge.
+local group_keys = {
+  { "SUPER + ALT + LEFT", "Move window to group on left", "l" },
+  { "SUPER + ALT + RIGHT", "Move window to group on right", "r" },
+}
 
 -- Hides the focused sidebar. Omarchy binds it to the system menu
 -- (default/hypr/bindings/utilities.lua); that comes back whenever the sidebar
@@ -232,6 +239,9 @@ do
   for _, k in ipairs(swap_keys) do
     seen[normalise(k[1])] = "Omarchy's swap keys"
   end
+  for _, k in ipairs(group_keys) do
+    seen[normalise(k[1])] = "Omarchy's group keys"
+  end
   for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "agent", "toggle" },
     { "agent", "new" }, { "agent", "load" }, { "agent", "reset" } }) do
     local group, name = option[1], option[2]
@@ -264,7 +274,7 @@ local function is_agent(window)
   return agent_class ~= nil and window ~= nil and window.class == agent_class
 end
 
--- Escape and the remembered side are per kind: the agent, or any other window.
+-- Escape and the remembered place are per kind: the agent, or any other window.
 local function kind(window)
   return is_agent(window) and "agent" or "sidebar"
 end
@@ -276,7 +286,30 @@ end
 -- floating before, to put it back that way. Each member's value is a sequence
 -- number: SUPER + B cycles through them in the order they were added.
 local members = {}
+-- Also kept in a file: a Hyprland reload runs this file afresh, and a window
+-- already in a sidebar must still go back floating when it leaves.
+local floating_file = state_root .. "/was-floating"
 local was_floating = {}
+do
+  local f = io.open(floating_file, "r")
+  if f then
+    for address in f:lines() do
+      was_floating[address] = true
+    end
+    f:close()
+  end
+end
+local function save_floating()
+  local f = io.open(floating_file, "w")
+  if f then
+    for address, floated in pairs(was_floating) do
+      if floated then
+        f:write(address, "\n")
+      end
+    end
+    f:close()
+  end
+end
 local sequence = 0
 local function next_sequence()
   sequence = sequence + 1
@@ -368,7 +401,8 @@ end
 
 -- Shows or hides a sidebar workspace on the active monitor.
 local function toggle_workspace(name)
-  dim_behind(true)
+  -- Showing it (the same name shown already would hide it instead).
+  dim_behind(shown_sidebar() ~= name)
   hl.dispatch(hl.dsp.workspace.toggle_special(name:sub(#"special:" + 1)))
 end
 
@@ -400,27 +434,36 @@ local function focus(window)
   hl.dispatch(hl.dsp.focus({ window = selector(window) }))
 end
 
--- Remembered sides ------------------------------------------------------------
+-- Remembered places -----------------------------------------------------------
 
+-- Where each kind of sidebar (the agent, any other window) was last put: the
+-- screen edge it's nearer to, its distance from that edge, and its distance
+-- from the top, all within the usable area. Kept in <kind>.side as
+-- "<side> <offset> <top>" (before 0.6 it held only the side).
 os.execute("mkdir -p " .. quote(state_root))
 
-local sides = {}
+local places = {}
 for _, k in ipairs({ "agent", "sidebar" }) do
-  sides[k] = "right"
+  places[k] = { side = "right", offset = 0, top = 0 }
   local f = io.open(state_root .. "/" .. k .. ".side", "r")
   if f then
-    if f:read("l") == "left" then
-      sides[k] = "left"
+    local side, offset, top = (f:read("l") or ""):match("^(%a+)%s*(%-?%d*)%s*(%-?%d*)")
+    if side == "left" or side == "right" then
+      places[k] = { side = side, offset = tonumber(offset) or 0, top = tonumber(top) or 0 }
     end
     f:close()
   end
 end
 
-local function save_side(k, side)
-  sides[k] = side
+local function save_place(k, place)
+  local saved = places[k]
+  if saved.side == place.side and saved.offset == place.offset and saved.top == place.top then
+    return
+  end
+  places[k] = place
   local f = io.open(state_root .. "/" .. k .. ".side", "w")
   if f then
-    f:write(side, "\n")
+    f:write(string.format("%s %d %d\n", place.side, place.offset, place.top))
     f:close()
   end
 end
@@ -448,9 +491,9 @@ end
 -- another one.
 local docked_on = {}
 
--- Docks the window to its edge at the given size (clamped to the monitor),
--- keeping the given top edge, or the top of the usable area.
-local function dock(window, width, height, top)
+-- Puts the window at x, y with the given size, kept inside the usable area of
+-- its monitor, and remembers the place for its kind.
+local function place(window, width, height, x, y)
   if window.monitor == nil then
     return
   end
@@ -458,20 +501,32 @@ local function dock(window, width, height, top)
   local max_width, max_height = a.right - a.left, a.bottom - a.top
   width = math.floor(math.min(math.max(width, math.min(360, max_width)), max_width))
   height = math.floor(math.min(math.max(height, math.min(300, max_height)), max_height))
-  top = math.floor(math.min(math.max(top or a.top, a.top), a.bottom - height))
-  local x = math.floor(sides[kind(window)] == "left" and a.left or (a.right - width))
+  x = math.floor(math.min(math.max(x, a.left), a.right - width))
+  y = math.floor(math.min(math.max(y, a.top), a.bottom - height))
 
   dispatch_for(window, hl.dsp.window.resize, { x = width, y = height })
-  dispatch_for(window, hl.dsp.window.move, { x = x, y = top })
+  dispatch_for(window, hl.dsp.window.move, { x = x, y = y })
   docked_on[window.address] = window.monitor.id
+
+  local from_left, from_right = x - a.left, a.right - (x + width)
+  save_place(kind(window), {
+    side = from_left <= from_right and "left" or "right",
+    offset = math.min(from_left, from_right),
+    top = y - a.top,
+  })
 end
 
+-- The default width, at the remembered place, reaching to the bottom.
 local function dock_default(window)
   if window.monitor == nil then
     return
   end
   local a = area(window.monitor)
-  dock(window, a.width * config.width, a.bottom - a.top)
+  local p = places[kind(window)]
+  local width = a.width * config.width
+  local top = a.top + p.top
+  local x = p.side == "left" and (a.left + p.offset) or (a.right - p.offset - width)
+  place(window, width, a.bottom - top, x, top)
 end
 
 -- Entering and leaving the sidebar --------------------------------------------
@@ -570,7 +625,10 @@ end
 local function leave(window)
   local floated = was_floating[window.address]
   members[window.address] = nil
-  was_floating[window.address] = nil
+  if floated ~= nil then
+    was_floating[window.address] = nil
+    save_floating()
+  end
   hide_if_empty(window.address)
   set_dim(window, false)
   unstyle(window)
@@ -622,6 +680,9 @@ local function enter(window, opened)
 
   if members[window.address] == nil then
     was_floating[window.address] = not opened and window.floating == true
+    if was_floating[window.address] then
+      save_floating()
+    end
     members[window.address] = next_sequence()
   end
   if window.pinned then
@@ -651,29 +712,50 @@ end
 
 -- Focus-scoped keys -----------------------------------------------------------
 
--- In the docked sidebar: MINUS widens and EQUAL narrows it away from its edge,
--- with SHIFT they change its height (the top edge stays). Any other window gets
--- Omarchy's resize.
+-- In the sidebar: MINUS widens and EQUAL narrows it, keeping the side nearer a
+-- screen edge in place; with SHIFT they change its height (the top edge stays).
+-- Any other window gets Omarchy's resize.
 local function resize(dx, dy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating then
-    dock(window, window.size.x - dx, window.size.y + dy, window.at.y)
+    local width = window.size.x - dx
+    local x = window.at.x
+    if window.monitor then
+      local a = area(window.monitor)
+      if a.right - (x + window.size.x) < x - a.left then
+        x = x + window.size.x - width -- nearer the right edge: that edge stays
+      end
+    end
+    place(window, width, window.size.y + dy, x, window.at.y)
   else
     hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
   end
 end
 
--- In the docked sidebar: LEFT/RIGHT dock it to that edge (keeping its size) and
--- remember the side; UP/DOWN do nothing. Any other window gets Omarchy's swap.
+-- In the sidebar: the arrows move it a step that way (repeating while held),
+-- up to the edges of the screen. Any other window gets Omarchy's swap.
+local MOVE_STEP = 50
+local moves = { l = { -1, 0 }, r = { 1, 0 }, u = { 0, -1 }, d = { 0, 1 } }
 local function swap(direction)
   local window = hl.get_active_window()
   if is_member(window) and window.floating then
-    if direction == "l" or direction == "r" then
-      save_side(kind(window), direction == "l" and "left" or "right")
-      dock(window, window.size.x, window.size.y, window.at.y)
-    end
+    local m = moves[direction]
+    place(window, window.size.x, window.size.y, window.at.x + m[1] * MOVE_STEP, window.at.y + m[2] * MOVE_STEP)
   else
     hl.dispatch(hl.dsp.window.swap({ direction = direction }))
+  end
+end
+
+-- In the sidebar: LEFT/RIGHT dock it to that screen edge, keeping its size and
+-- height on screen. Any other window gets Omarchy's move into a group.
+local function dock_to(direction)
+  local window = hl.get_active_window()
+  if is_member(window) and window.floating and window.monitor then
+    local a = area(window.monitor)
+    local x = direction == "l" and a.left or (a.right - window.size.x)
+    place(window, window.size.x, window.size.y, x, window.at.y)
+  else
+    hl.dispatch(hl.dsp.window.move({ into_group = direction }))
   end
 end
 
@@ -688,8 +770,15 @@ local function bind_sidebar_keys()
   for _, s in ipairs(swap_keys) do
     local direction = s[3]
     hl.unbind(s[1])
-    o.bind(s[1], s[2], guard(s[2], function()
+    o.bind(s[1], "Move sidebar", guard(s[2], function()
       swap(direction)
+    end), { repeating = true })
+  end
+  for _, g in ipairs(group_keys) do
+    local direction = g[3]
+    hl.unbind(g[1])
+    o.bind(g[1], "Dock sidebar to the edge", guard(g[2], function()
+      dock_to(direction)
     end))
   end
 end
@@ -702,6 +791,10 @@ local function bind_omarchy_keys()
   for _, s in ipairs(swap_keys) do
     hl.unbind(s[1])
     o.bind(s[1], s[2], hl.dsp.window.swap({ direction = s[3] }))
+  end
+  for _, g in ipairs(group_keys) do
+    hl.unbind(g[1])
+    o.bind(g[1], g[2], hl.dsp.window.move({ into_group = g[3] }))
   end
 end
 
@@ -772,16 +865,15 @@ function sync_keys()
   local window = hl.get_active_window()
   local visible = is_member(window) and showing(window) and not keyboard_layer_open()
 
+  -- With Omarchy's bindings turned off, SUPER + ESCAPE may be yours: left alone.
   local want_escape = visible and config[kind(window)].escape
-  if want_escape ~= escape_bound and not switching then
+  if want_escape ~= escape_bound and not switching and omarchy_default_bindings ~= false then
     if want_escape then
       hl.unbind(HIDE_KEY)
       hl.bind(HIDE_KEY, guard("hiding the sidebar", hide_shown), { description = "Hide sidebar" })
     else
       hl.unbind(HIDE_KEY)
-      if omarchy_default_bindings ~= false then
-        o.bind(HIDE_KEY, "System menu", SYSTEM_MENU)
-      end
+      o.bind(HIDE_KEY, "System menu", SYSTEM_MENU)
     end
     escape_bound = want_escape
   end
@@ -852,6 +944,17 @@ do
     enter(w)
   end  -- For the next sidebar to show (a sidebar already showing keeps its dim).
   dim_behind(shown ~= nil)
+  -- Forget windows that left or closed while this wasn't loaded.
+  local pruned = false
+  for address in pairs(was_floating) do
+    if members[address] == nil then
+      was_floating[address] = nil
+      pruned = true
+    end
+  end
+  if pruned then
+    save_floating()
+  end
 end
 
 -- Windows that left the sidebar earlier: the current theme's border colours
@@ -930,7 +1033,10 @@ hl.on("window.close", guard("closing a window", function(window)
   local address = window and window.address
   if address then
     members[address] = nil
-    was_floating[address] = nil
+    if was_floating[address] ~= nil then
+      was_floating[address] = nil
+      save_floating()
+    end
     docked_on[address] = nil
   end
   sync_soon()
@@ -1002,7 +1108,9 @@ end
 -- Each further B (SUPER still held) highlights the next; letting go of SUPER
 -- shows the highlighted one, and SUPER + ESCAPE closes it without a change.
 -- Every message carries the whole state and a sequence number, as each one is a
--- separate process and they can arrive out of order.
+-- separate process and they can arrive out of order. The numbers start again
+-- whenever Hyprland reloads this file, while the shell keeps running, so they
+-- also carry an id for this load: the shell takes any message from a new one.
 --
 -- Letting go of SUPER is watched for by polling: a release binding on SUPER
 -- only fires if SUPER was the last key pressed, and here B came after it.
@@ -1010,6 +1118,8 @@ local SUPER_KEYS = { "Super_L", "Super_R" }
 local POLL_MS = 20
 local switcher = nil -- { windows, index, seq } while open
 local switcher_seq = 0
+math.randomseed(os.time() + math.floor(os.clock() * 1000000))
+local switcher_session = string.format("%d-%d", os.time(), math.random(1, 1000000000))
 
 local function json_string(value)
   local escaped = tostring(value):gsub('[%c"\\]', function(c)
@@ -1032,18 +1142,20 @@ local function switcher_update()
       json_string(w.address), json_string(w.title or w.class or ""), w.size.x, w.size.y)
   end
   local hex = sidebar_border and sidebar_border[1]:match("^rgba%((%x%x%x%x%x%x)")
-  switcher_send("show", string.format('{"seq":%d,"index":%d,"accent":%s,"items":[%s]}',
-    switcher.seq, switcher.index - 1, json_string(hex and ("#" .. hex) or "#ffffff"), table.concat(items, ",")))
+  switcher_send("show", string.format('{"session":%s,"seq":%d,"index":%d,"accent":%s,"items":[%s]}',
+    json_string(switcher_session), switcher.seq, switcher.index - 1, json_string(hex and ("#" .. hex) or "#ffffff"), table.concat(items, ",")))
 end
 
 local function switcher_close()
   if switcher == nil then
     return
   end
-  hl.unbind(HIDE_KEY)
-  escape_bound = nil -- sync_keys binds HIDE_KEY afresh, whichever way it wants
+  if omarchy_default_bindings ~= false then
+    hl.unbind(HIDE_KEY)
+    escape_bound = nil -- sync_keys binds HIDE_KEY afresh, whichever way it wants
+  end
   switcher_seq = switcher_seq + 1
-  switcher_send("close", tostring(switcher_seq))
+  switcher_send("close", switcher_session .. " " .. switcher_seq)
   switcher = nil
   switching = false
   sync_keys()
@@ -1089,8 +1201,10 @@ local function switcher_open(list, index)
   switcher = { windows = list, index = index }
   switching = true
   watch_super(switcher)
-  hl.unbind(HIDE_KEY)
-  hl.bind(HIDE_KEY, guard("closing the switcher", switcher_close), { description = "Close the sidebar switcher" })
+  if omarchy_default_bindings ~= false then
+    hl.unbind(HIDE_KEY)
+    hl.bind(HIDE_KEY, guard("closing the switcher", switcher_close), { description = "Close the sidebar switcher" })
+  end
   switcher_update()
 end
 
@@ -1132,7 +1246,8 @@ local function toggle()
       end
     end
   end
-  if config.switcher and #list > 1 then
+  -- The switcher closes when SUPER is let go, so it needs SUPER held now.
+  if config.switcher and #list > 1 and super_down() then
     switcher_open(list, index)
   else
     show(list[index])
@@ -1182,7 +1297,7 @@ local function show_agent()
   return true
 end
 
--- The agent as the sidebar, shown, at the default size on its remembered side.
+-- The agent as the sidebar, shown, at the default size at its remembered place.
 local function reset_agent()
   local window = agent_window()
   if window == nil then
@@ -1309,9 +1424,16 @@ sidebar = {
   end,
   convert = convert,
   swap = swap,
+  dock = dock_to,
   resize = resize,
   release = release,
   -- The switcher's SUPER release and SUPER + ESCAPE, for testing without keys.
   commit = switcher_commit,
   cancel = switcher_close,
+  -- The dim behind a sidebar to suit what shows now. bin/agent-sidebar calls
+  -- it on exit, as starting the agent raises it ahead of a sidebar that may
+  -- never show (a cancelled menu, a failed start).
+  settle = function()
+    dim_behind(sidebar_shown())
+  end,
 }
