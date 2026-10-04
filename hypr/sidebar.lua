@@ -962,9 +962,11 @@ local function hide_on_outside_click()
   -- above windows) leave the sidebar alone; closing such a panel would hand
   -- focus back to the hidden sidebar and show it again. The desktop
   -- background is a layer too, but below windows, so clicking it still hides.
+  -- The Dock plugin's strips are layers too, invisible and taking no input,
+  -- laid over the windows it pins: a click there is on the pinned window.
   for _, l in ipairs(hl.get_layers()) do
-    if l.mapped and (l.layer or 0) >= 2 and p.x >= l.x and p.x < l.x + l.w
-        and p.y >= l.y and p.y < l.y + l.h then
+    if l.mapped and (l.layer or 0) >= 2 and l.namespace ~= "omarchy-dock-strip"
+        and p.x >= l.x and p.x < l.x + l.w and p.y >= l.y and p.y < l.y + l.h then
       return
     end
   end
