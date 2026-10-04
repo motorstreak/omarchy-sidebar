@@ -767,6 +767,9 @@ local function enter(window, opened)
   if window.pinned then
     dispatch_for(window, hl.dsp.window.pin, {})
   end
+  -- A window popped out with SUPER + O: drop Omarchy's "pop" tag, or its
+  -- pop-out look (rounded corners) comes back once it leaves the sidebar.
+  dispatch_for(window, hl.dsp.window.tag, { tag = "-pop" })
   if window.fullscreen and window.fullscreen ~= 0 then
     dispatch_for(window, hl.dsp.window.fullscreen, { mode = window.fullscreen == 1 and "maximized" or "fullscreen" })
   end
