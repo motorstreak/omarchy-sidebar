@@ -87,12 +87,23 @@ end
 -- Config -----------------------------------------------------------------------
 
 local defaults = {
-  margin = 24, -- gap to the screen edges and bar
+  -- Gap to the screen edges and the bar: false for the one tiled windows have
+  -- (Hyprland's outer gap; the border is inside it, as on tiled windows), or a
+  -- number of pixels.
+  margin = false,
   width = 0.33, -- default width as a share of the monitor
-  dim = true, -- dim the rest of the screen more while a sidebar shows
-  -- The sidebar's border colour: "theme" (the theme's foreground colour), a
-  -- colour such as "#14B9B5" or "rgba(14b9b5ff)", or false for the usual border.
-  border = "theme",
+  -- Dim the rest of the screen while a sidebar shows. Off, nothing is dimmed:
+  -- not even Omarchy's light dim behind any special workspace.
+  dim = false,
+  -- The sidebar's border: a colour name from the theme's colors.toml
+  -- ("background", "foreground", "accent", ...), "theme" (the foreground), a
+  -- colour such as "#14B9B5" or "rgba(14b9b5ff)", "none", or false for the usual
+  -- border. In the background colour, a wide border reads as padding around the
+  -- window's content.
+  border = "background",
+  border_size = 14, -- width of that border
+  border_opacity = 0.4, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
+  rounding = 28, -- corner radius of sidebars (Omarchy's windows are square); 0 for square
   click_outside = true, -- clicking outside the shown sidebar hides it
   -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
   -- one animation for every special workspace, so this fades the scratchpad
@@ -174,7 +185,8 @@ local function apply(into, overrides, path, problems, keys)
       else
         problems[#problems + 1] = name .. " must be a table"
       end
-    elseif type(v) == type(current) or (v == false and keys and keys[k]) then
+    elseif type(v) == type(current) or (v == false and keys and keys[k])
+        or (name == "margin" and (type(v) == "number" or v == false)) then
       into[k] = v
     else
       problems[#problems + 1] = name .. " must be a " .. type(current)
@@ -204,13 +216,25 @@ do
     problems[#problems + 1] = "width must be between 0 and 1"
     config.width = 0.33
   end
-  if config.margin < 0 or config.margin > 200 then
-    problems[#problems + 1] = "margin must be between 0 and 200"
-    config.margin = 24
+  if type(config.margin) == "number" and (config.margin < 0 or config.margin > 200) then
+    problems[#problems + 1] = "margin must be false or between 0 and 200"
+    config.margin = 20
   end
-  if config.border and config.border ~= "theme" and not config.border:match("^#%x%x%x%x%x%x$")
-      and not config.border:match("^rgba?%([%x, .]+%)$") then
-    problems[#problems + 1] = "border must be \"theme\", a colour like \"#14B9B5\", or false"
+  if config.rounding < 0 or config.rounding > 50 then
+    problems[#problems + 1] = "rounding must be between 0 and 50"
+    config.rounding = 28
+  end
+  if config.border_opacity < 0 or config.border_opacity > 1 then
+    problems[#problems + 1] = "border_opacity must be between 0 and 1"
+    config.border_opacity = 0.4
+  end
+  if config.border_size < 1 or config.border_size > 60 then
+    problems[#problems + 1] = "border_size must be between 1 and 60"
+    config.border_size = 14
+  end
+  if config.border and not config.border:match("^[%a_]+$")
+      and not config.border:match("^#%x%x%x%x%x%x$") and not config.border:match("^rgba?%([%x, .]+%)$") then
+    problems[#problems + 1] = "border must be a theme colour name, a colour like \"#14B9B5\", \"none\", or false"
     config.border = "theme"
   end
   -- Used as a terminal app id and in a window rule: keep it to a plain id.
@@ -384,15 +408,19 @@ local function showing(window)
 end
 
 -- The dim behind the sidebar is Hyprland's dim_special (which dims everything
--- behind a shown special workspace), raised while a sidebar shows. It crossfades
--- smoothly between sidebars, where a dim on each window doubled up for a moment
--- and then vanished in one frame. Hyprland takes the value when a special
--- workspace appears, so it is raised just before a sidebar shows and set back
--- to Omarchy's once something else shows (or nothing), for the scratchpad.
+-- behind a shown special workspace): raised while a sidebar shows with `dim`,
+-- or none at all without it. It crossfades smoothly between sidebars, where a
+-- dim on each window doubled up for a moment and then vanished in one frame.
+-- Hyprland takes the value when a special workspace appears, so it is set just
+-- before a sidebar shows and set back to Omarchy's once something else shows
+-- (or nothing), for the scratchpad.
 local base_dim = tonumber(hl.get_config("decoration:dim_special")) or 0.2
 local special_dim = base_dim
 local function dim_behind(sidebar)
-  local value = (sidebar and config.dim) and (1 - (1 - base_dim) * 0.6) or base_dim
+  local value = base_dim
+  if sidebar then
+    value = config.dim and (1 - (1 - base_dim) * 0.6) or 0
+  end
   if value ~= special_dim then
     hl.config({ decoration = { dim_special = value } })
     special_dim = value
@@ -470,19 +498,45 @@ end
 
 -- Geometry -------------------------------------------------------------------
 
+-- The gap from the screen edges and the bar (top, right, bottom, left): the
+-- `margin` option, or by default where a tiled window's border starts, so a
+-- sidebar lines up with tiled windows (Hyprland's outer gap, plus the border
+-- width if sidebars have one, as positions are inside the border).
+local function margins()
+  if type(config.margin) == "number" then
+    return config.margin, config.margin, config.margin, config.margin
+  end
+  local top, right, bottom, left = 0, 0, 0, 0
+  local g = hl.get_config("general:gaps_out")
+  if type(g) == "number" then
+    top, right, bottom, left = g, g, g, g
+  elseif g then
+    top, right, bottom, left = g.top or 0, g.right or 0, g.bottom or 0, g.left or 0
+  end
+  -- The sidebar's own border width (positions are inside the border).
+  local b = 0
+  if config.border == false then
+    local size = hl.get_config("general:border_size")
+    b = type(size) == "number" and size or 0
+  elseif config.border ~= "none" then
+    b = math.floor(config.border_size)
+  end
+  return top + b, right + b, bottom + b, left + b
+end
+
 local function area(m)
   local r = m.reserved or {}
-  local margin = config.margin
+  local top, right, bottom, left = margins()
   local mw, mh = m.width / m.scale, m.height / m.scale
   -- Rotated by 90 or 270 degrees (also when flipped): width and height swap.
   if (m.transform or 0) % 2 == 1 then
     mw, mh = mh, mw
   end
   return {
-    left = m.x + (r.left or 0) + margin,
-    right = m.x + mw - (r.right or 0) - margin,
-    top = m.y + (r.top or 0) + margin,
-    bottom = m.y + mh - (r.bottom or 0) - margin,
+    left = m.x + (r.left or 0) + left,
+    right = m.x + mw - (r.right or 0) - right,
+    top = m.y + (r.top or 0) + top,
+    bottom = m.y + mh - (r.bottom or 0) - bottom,
     width = mw,
   }
 end
@@ -523,7 +577,7 @@ local function dock_default(window)
   end
   local a = area(window.monitor)
   local p = places[kind(window)]
-  local width = a.width * config.width
+  local width = math.floor(a.width * config.width) -- whole pixels, so x lines up
   local top = a.top + p.top
   local x = p.side == "left" and (a.left + p.offset) or (a.right - p.offset - width)
   place(window, width, a.bottom - top, x, top)
@@ -541,23 +595,40 @@ end
 
 -- The sidebar's border colours (focused, unfocused), or nil to leave borders be.
 local sidebar_border = nil
+local no_border = config.border == "none"
+-- A colour from the current theme's colors.toml, as "rrggbb".
+local theme_colors = ""
+do
+  local f = io.open(state_home .. "/omarchy/current/theme/colors.toml", "r")
+  if f then
+    theme_colors = "\n" .. f:read("a")
+    f:close()
+  end
+end
+local function theme_colour(name)
+  return theme_colors:match("\n%s*" .. name .. '%s*=%s*"#?(%x%x%x%x%x%x)"')
+end
+-- The switcher's highlight.
+local theme_foreground = theme_colour("foreground")
 do
   local spec = config.border
-  local hex = nil
-  if spec == "theme" then
-    local f = io.open(state_home .. "/omarchy/current/theme/colors.toml", "r")
-    if f then
-      hex = ("\n" .. f:read("a")):match('\n%s*foreground%s*=%s*"#?(%x%x%x%x%x%x)"')
-      f:close()
-    end
-  elseif spec then
-    hex = spec:match("^#(%x%x%x%x%x%x)$")
-    if hex == nil then
+  if spec and not no_border then
+    local hex = spec:match("^#(%x%x%x%x%x%x)$")
+    if spec == "theme" then
+      hex = theme_foreground
+    elseif spec:match("^[%a_]+$") then
+      hex = theme_colour(spec)
+      if hex == nil then
+        notify("No colour \"" .. spec .. "\" in the theme; sidebars keep the usual border")
+      end
+    elseif hex == nil then
       sidebar_border = { spec, spec }
     end
-  end
-  if hex then
-    sidebar_border = { "rgba(" .. hex .. "ff)", "rgba(" .. hex .. "aa)" }
+    -- The same focused or not, so it reads as part of the window.
+    if hex then
+      local alpha = string.format("%02x", math.floor(config.border_opacity * 255 + 0.5))
+      sidebar_border = { "rgba(" .. hex .. alpha .. ")", "rgba(" .. hex .. alpha .. ")" }
+    end
   end
 end
 
@@ -597,12 +668,20 @@ local function remember_restored(address)
 end
 
 local function style(window)
-  if sidebar_border then
+  dispatch_for(window, hl.dsp.window.set_prop, {
+    prop = "rounding", value = config.rounding > 0 and tostring(math.floor(config.rounding)) or "unset" })
+  if no_border then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "0" })
+  elseif sidebar_border then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = tostring(math.floor(config.border_size)) })
     set_border(window, sidebar_border[1], sidebar_border[2])
   end
 end
 
 local function unstyle(window)
+  -- Unlike a colour, a border size and rounding can be handed back to the config.
+  dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "unset" })
+  dispatch_for(window, hl.dsp.window.set_prop, { prop = "rounding", value = "unset" })
   set_border(window, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
   remember_restored(window.address)
 end
@@ -921,11 +1000,10 @@ do
   for _, w in ipairs(inside) do
     members[w.address] = next_sequence()
     set_dim(w, false)
-    if sidebar_border then
-      style(w)
-    else
-      unstyle(w)
+    if not sidebar_border then
+      unstyle(w) -- the usual border colours
     end
+    style(w)
     docked_on[w.address] = w.monitor and w.monitor.id
     if taken[w.workspace.name] then
       local target = free_workspace()
@@ -955,6 +1033,7 @@ do
   if pruned then
     save_floating()
   end
+
 end
 
 -- Windows that left the sidebar earlier: the current theme's border colours
@@ -1142,7 +1221,7 @@ local function switcher_update()
     items[i] = string.format('{"address":%s,"title":%s,"width":%d,"height":%d}',
       json_string(w.address), json_string(w.title or w.class or ""), w.size.x, w.size.y)
   end
-  local hex = sidebar_border and sidebar_border[1]:match("^rgba%((%x%x%x%x%x%x)")
+  local hex = (sidebar_border and sidebar_border[1]:match("^rgba%((%x%x%x%x%x%x)")) or theme_foreground
   switcher_send("show", string.format('{"session":%s,"seq":%d,"index":%d,"accent":%s,"items":[%s]}',
     json_string(switcher_session), switcher.seq, switcher.index - 1, json_string(hex and ("#" .. hex) or "#ffffff"), table.concat(items, ",")))
 end
@@ -1298,12 +1377,15 @@ local function show_agent()
   return true
 end
 
--- The agent as the sidebar, shown, at the default size at its remembered place.
+-- The agent as the sidebar, shown, at the default size against its edge.
 local function reset_agent()
   local window = agent_window()
   if window == nil then
     return false
   end
+  -- Back to its default spot: flush against its edge from the top, forgetting
+  -- where it was moved to (the edge stays).
+  save_place("agent", { side = places.agent.side, offset = 0, top = 0 })
   if is_member(window) then
     enter(window)
     show(window)

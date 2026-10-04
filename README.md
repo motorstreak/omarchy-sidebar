@@ -1,14 +1,14 @@
 # Omarchy Sidebar
 
 Turn any window into a **sidebar**: docked by the left or right screen edge,
-floating over your workspace, dimming everything behind it, and shown or hidden
+floating over your workspace, and shown or hidden
 with one key. One key also makes your Omarchy default coding agent a sidebar,
 with saved, searchable sessions when that agent is Claude Code.
 
 You can have several sidebars, one showing at a time: `Super + B` cycles
-through them, each replacing the one before. A sidebar's border uses your
-theme's foreground colour, so it's easy to tell apart from normal windows
-wherever it is.
+through them, each replacing the one before. Sidebars have rounded corners and
+a wide border in your theme's background colour, which reads as padding around
+the content (`border` and `border_size` in the config change it).
 
 Move a sidebar to a regular workspace and it becomes an ordinary window again,
 following every normal Omarchy binding. Turn it back into a sidebar any time.
@@ -36,7 +36,7 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 | `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
 | `Super + Shift + A` | New agent session (Claude: named with the date and time) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
-| `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default size, where you last put it |
+| `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default size, back against its edge at full height (forgets where you moved it; the edge stays) |
 
 Inside a sidebar that has focus:
 
@@ -59,9 +59,10 @@ menus and notifications don't hide a sidebar; neither do keys or clicks while a
 launcher, menu or screenshot selector is open. A click on an app's own menu
 that reaches past the sidebar's edge counts as outside it and hides it.
 
-A window that stops being the sidebar gets your theme's normal border colours
-(the first colour of a gradient border), replacing any border colour a window
-rule had given it; they follow theme changes while the plugin is installed.
+A window that stops being the sidebar gets your theme's normal border back: its
+width, and its colours (the first colour of a gradient border), replacing any
+border colour a window rule had given it; they follow theme changes while the
+plugin is installed.
 
 ### Keys the plugin uses
 
@@ -85,9 +86,12 @@ options, with their defaults:
 ```lua
 return {
   width = 0.33,          -- default width as a share of the screen
-  margin = 24,           -- gap to screen edges and the bar (0-200)
-  dim = true,            -- dim the rest of the screen while a sidebar shows
-  border = "theme",      -- sidebar border: "theme" (foreground colour), "#14B9B5", or false
+  margin = false,        -- gap to screen edges and the bar: false for the same as tiled windows, or pixels (0-200)
+  dim = false,           -- true: dim the rest of the screen while a sidebar shows (off, not even Omarchy's light dim)
+  border = "background", -- sidebar border: a theme colour name, "theme" (foreground), "#14B9B5", "none", or false for the usual one
+  border_size = 14,      -- its width; in the background colour it reads as padding around the content
+  border_opacity = 0.4,  -- 0 (clear) to 1 (solid), for a colour name or "#rrggbb" border
+  rounding = 28,         -- sidebars' corner radius (Omarchy's windows are square); 0 for square
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   switcher = true,       -- false: Super + B cycles sidebars directly, without previews
