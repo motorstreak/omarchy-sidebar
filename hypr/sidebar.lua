@@ -931,15 +931,14 @@ local function hide_on_outside_click()
 end
 
 -- While the visible sidebar has focus (and no launcher or menu has the
--- keyboard): SUPER + ESCAPE hides it if allowed for its kind, a click outside
--- hides it, and the resize/swap keys are the sidebar versions. Otherwise the
--- click is unbound (this owns plain left click: any other such binding is
--- dropped) and Omarchy's system menu and resize/swap keys are in place. With
--- `omarchy_default_bindings = false` Omarchy's keys are left alone.
+-- keyboard): SUPER + ESCAPE hides it if allowed for its kind, and the
+-- resize/swap keys are the sidebar versions. Otherwise Omarchy's system menu
+-- and resize/swap keys are in place. With `omarchy_default_bindings = false`
+-- Omarchy's keys are left alone. (A click outside hides it through the left
+-- click binding below, which is always there.)
 local escape_bound = false
 local switching = false -- the switcher holds HIDE_KEY while it's open
 local sidebar_keys = false
-local click_bound = false
 function sync_keys()
   local window = hl.get_active_window()
   local visible = is_member(window) and showing(window) and not keyboard_layer_open()
@@ -955,19 +954,6 @@ function sync_keys()
       o.bind(HIDE_KEY, "System menu", SYSTEM_MENU)
     end
     escape_bound = want_escape
-  end
-
-  local want_click = visible and config.click_outside
-  if want_click ~= click_bound then
-    if want_click then
-      hl.bind("mouse:272", guard("hiding the sidebar", hide_on_outside_click), {
-        non_consuming = true,
-        description = "Hide sidebar on a click outside it",
-      })
-    else
-      hl.unbind("mouse:272")
-    end
-    click_bound = want_click
   end
 
   local want_sidebar_keys = visible and window.floating == true and omarchy_default_bindings ~= false
@@ -1453,6 +1439,17 @@ end
 
 bind(config.sidebar.toggle, "Show/hide sidebar", toggle)
 bind(config.sidebar.convert, "Window to/from sidebar", convert)
+
+-- A plain left click outside the focused sidebar hides it. Bound once and for
+-- good, not only while a sidebar has focus: other plugins (the Dock) bind left
+-- click too, and unbinding a key removes every binding on it. The handler does
+-- nothing unless a sidebar is showing with focus. It doesn't consume the click.
+if config.click_outside then
+  hl.bind("mouse:272", guard("hiding the sidebar", hide_on_outside_click), {
+    non_consuming = true,
+    description = "Hide sidebar on a click outside it",
+  })
+end
 
 if agent_class then
   local script = dir .. "/bin/agent-sidebar"

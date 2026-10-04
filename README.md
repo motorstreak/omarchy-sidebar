@@ -69,13 +69,16 @@ plugin is installed.
 - `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
   replaces whatever was bound to that key before.
 - While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
-  system menu), plain left click, and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
+  system menu), and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
   swap (`Super + Shift + arrows`) and move-into-group (`Super + Alt + Left/Right`) keys. Everywhere else those are Omarchy's own
   bindings: they start out untouched, and after a sidebar has had focus they
   are re-bound exactly as Omarchy defines them. So if you've customised the
-  system menu, resize, swap or group keys (or bound plain left click yourself), your
-  version is replaced by Omarchy's until Hyprland reloads. With
-  `omarchy_default_bindings = false` Omarchy's keys are left alone.
+  system menu, resize, swap or group keys, your version is replaced by
+  Omarchy's until Hyprland reloads. With `omarchy_default_bindings = false`
+  Omarchy's keys are left alone.
+- A plain left click has an extra binding (to hide a sidebar on a click
+  outside it) that lets the click through and does nothing unless a sidebar
+  has focus.
 
 ## Configure
 
