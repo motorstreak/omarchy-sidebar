@@ -6,9 +6,11 @@ with one key. One key also makes your Omarchy default coding agent a sidebar,
 with saved, searchable sessions when that agent is Claude Code.
 
 You can have several sidebars, one showing at a time: `Super + B` cycles
-through them, each replacing the one before. Sidebars look like your other
-windows, but their border is your theme's green, so they stand out (`border`,
-`border_opacity`, `border_size` and `rounding` in the config change it).
+through them, each replacing the one before. Sidebars keep a wider gap from the
+screen edges than tiled windows, have the rounded corners of Omarchy's
+popped-out windows, and a border in your theme's green so they stand out
+(`margin`, `rounding`, `border`, `border_opacity` and `border_size` in the
+config change it).
 
 Move a sidebar to a regular workspace and it becomes an ordinary window again,
 following every normal Omarchy binding. Turn it back into a sidebar any time.
@@ -89,12 +91,12 @@ options, with their defaults:
 ```lua
 return {
   width = 0.33,          -- default width as a share of the screen
-  margin = false,        -- gap to screen edges and the bar: false for the same as tiled windows, or pixels (0-200)
+  margin = 32,           -- gap from the sidebar's border to screen edges and the bar (0-200), or false for the same as tiled windows
   dim = false,           -- true: dim the rest of the screen while a sidebar shows (off, not even Omarchy's light dim)
   border = "green",      -- sidebar border: a theme colour name, "theme" (foreground), "#14B9B5", "none", or false for the usual one
   border_size = false,   -- its width: false for Omarchy's, or pixels
   border_opacity = 1,    -- 0 (clear) to 1 (solid), for a colour name or "#rrggbb" border
-  rounding = 0,          -- sidebars' corner radius; 0 for square, as Omarchy's windows are
+  rounding = 8,          -- sidebars' corner radius, as Omarchy's popped-out windows (Super + O); 0 for square
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   switcher = true,       -- false: Super + B cycles sidebars directly, without previews

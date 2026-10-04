@@ -87,10 +87,10 @@ end
 -- Config -----------------------------------------------------------------------
 
 local defaults = {
-  -- Gap to the screen edges and the bar: false for the one tiled windows have
-  -- (Hyprland's outer gap; the border is inside it, as on tiled windows), or a
-  -- number of pixels.
-  margin = false,
+  -- Gap from the sidebar's border to the screen edges and the bar, in pixels
+  -- (wider than tiled windows' by default), or false for the one tiled windows
+  -- have (Hyprland's outer gap).
+  margin = 32,
   width = 0.33, -- default width as a share of the monitor
   -- Dim the rest of the screen while a sidebar shows. Off, nothing is dimmed:
   -- not even Omarchy's light dim behind any special workspace.
@@ -102,7 +102,7 @@ local defaults = {
   border = "green",
   border_size = false, -- its width: false for Omarchy's, as on other windows, or pixels
   border_opacity = 1, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
-  rounding = 0, -- corner radius of sidebars; 0 for square, as Omarchy's windows are
+  rounding = 8, -- corner radius of sidebars, as Omarchy's popped-out (SUPER + O) windows; 0 for square
   click_outside = true, -- clicking outside the shown sidebar hides it
   -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
   -- one animation for every special workspace, so this fades the scratchpad
@@ -217,11 +217,11 @@ do
   end
   if type(config.margin) == "number" and (config.margin < 0 or config.margin > 200) then
     problems[#problems + 1] = "margin must be false or between 0 and 200"
-    config.margin = 20
+    config.margin = 32
   end
   if config.rounding < 0 or config.rounding > 50 then
     problems[#problems + 1] = "rounding must be between 0 and 50"
-    config.rounding = 0
+    config.rounding = 8
   end
   if config.border_opacity < 0 or config.border_opacity > 1 then
     problems[#problems + 1] = "border_opacity must be between 0 and 1"
@@ -502,15 +502,16 @@ end
 -- sidebar lines up with tiled windows (Hyprland's outer gap, plus the border
 -- width if sidebars have one, as positions are inside the border).
 local function margins()
-  if type(config.margin) == "number" then
-    return config.margin, config.margin, config.margin, config.margin
-  end
   local top, right, bottom, left = 0, 0, 0, 0
-  local g = hl.get_config("general:gaps_out")
-  if type(g) == "number" then
-    top, right, bottom, left = g, g, g, g
-  elseif g then
-    top, right, bottom, left = g.top or 0, g.right or 0, g.bottom or 0, g.left or 0
+  if type(config.margin) == "number" then
+    top, right, bottom, left = config.margin, config.margin, config.margin, config.margin
+  else
+    local g = hl.get_config("general:gaps_out")
+    if type(g) == "number" then
+      top, right, bottom, left = g, g, g, g
+    elseif g then
+      top, right, bottom, left = g.top or 0, g.right or 0, g.bottom or 0, g.left or 0
+    end
   end
   -- The sidebar's own border width (positions are inside the border).
   local b = 0
