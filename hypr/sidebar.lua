@@ -96,14 +96,13 @@ local defaults = {
   -- not even Omarchy's light dim behind any special workspace.
   dim = false,
   -- The sidebar's border: a colour name from the theme's colors.toml
-  -- ("background", "foreground", "accent", ...), "theme" (the foreground), a
+  -- ("green", "foreground", "cyan", "background", ...), "theme" (the foreground), a
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", "none", or false for the usual
-  -- border. In the background colour, a wide border reads as padding around the
-  -- window's content.
-  border = "background",
-  border_size = 14, -- width of that border
-  border_opacity = 0.4, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
-  rounding = 28, -- corner radius of sidebars (Omarchy's windows are square); 0 for square
+  -- border. (In "background" and wide, it reads as padding around the content.)
+  border = "green",
+  border_size = false, -- its width: false for Omarchy's, as on other windows, or pixels
+  border_opacity = 1, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
+  rounding = 0, -- corner radius of sidebars; 0 for square, as Omarchy's windows are
   click_outside = true, -- clicking outside the shown sidebar hides it
   -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
   -- one animation for every special workspace, so this fades the scratchpad
@@ -186,7 +185,7 @@ local function apply(into, overrides, path, problems, keys)
         problems[#problems + 1] = name .. " must be a table"
       end
     elseif type(v) == type(current) or (v == false and keys and keys[k])
-        or (name == "margin" and (type(v) == "number" or v == false)) then
+        or ((name == "margin" or name == "border_size") and (type(v) == "number" or v == false)) then
       into[k] = v
     else
       problems[#problems + 1] = name .. " must be a " .. type(current)
@@ -222,15 +221,15 @@ do
   end
   if config.rounding < 0 or config.rounding > 50 then
     problems[#problems + 1] = "rounding must be between 0 and 50"
-    config.rounding = 28
+    config.rounding = 0
   end
   if config.border_opacity < 0 or config.border_opacity > 1 then
     problems[#problems + 1] = "border_opacity must be between 0 and 1"
-    config.border_opacity = 0.4
+    config.border_opacity = 1
   end
-  if config.border_size < 1 or config.border_size > 60 then
-    problems[#problems + 1] = "border_size must be between 1 and 60"
-    config.border_size = 14
+  if type(config.border_size) == "number" and (config.border_size < 1 or config.border_size > 60) then
+    problems[#problems + 1] = "border_size must be false or between 1 and 60"
+    config.border_size = false
   end
   if config.border and not config.border:match("^[%a_]+$")
       and not config.border:match("^#%x%x%x%x%x%x$") and not config.border:match("^rgba?%([%x, .]+%)$") then
@@ -515,7 +514,7 @@ local function margins()
   end
   -- The sidebar's own border width (positions are inside the border).
   local b = 0
-  if config.border == false then
+  if config.border == false or (config.border ~= "none" and not config.border_size) then
     local size = hl.get_config("general:border_size")
     b = type(size) == "number" and size or 0
   elseif config.border ~= "none" then
@@ -673,7 +672,8 @@ local function style(window)
   if no_border then
     dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "0" })
   elseif sidebar_border then
-    dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = tostring(math.floor(config.border_size)) })
+    dispatch_for(window, hl.dsp.window.set_prop, {
+      prop = "border_size", value = config.border_size and tostring(math.floor(config.border_size)) or "unset" })
     set_border(window, sidebar_border[1], sidebar_border[2])
   end
 end
