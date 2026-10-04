@@ -92,9 +92,10 @@ local defaults = {
   -- have (Hyprland's outer gap).
   margin = 32,
   width = 0.33, -- default width as a share of the monitor
-  -- Dim the rest of the screen while a sidebar shows. Off, nothing is dimmed:
-  -- not even Omarchy's light dim behind any special workspace.
-  dim = false,
+  -- How much to dim the rest of the screen while a sidebar shows, 0 to 1 (0 or
+  -- false: none, not even Omarchy's light dim behind special workspaces; true:
+  -- the old strong dim).
+  dim = 0.18,
   -- The sidebar's border: a colour name from the theme's colors.toml
   -- ("green", "foreground", "cyan", "background", ...), "theme" (the foreground), a
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", "none", or false for the usual
@@ -102,6 +103,7 @@ local defaults = {
   border = "green",
   border_size = false, -- its width: false for Omarchy's, as on other windows, or pixels
   border_opacity = 1, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
+  shadow = false, -- true: a large, faint shadow around sidebars
   rounding = 8, -- corner radius of sidebars, as Omarchy's popped-out (SUPER + O) windows; 0 for square
   click_outside = true, -- clicking outside the shown sidebar hides it
   -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
@@ -185,6 +187,7 @@ local function apply(into, overrides, path, problems, keys)
         problems[#problems + 1] = name .. " must be a table"
       end
     elseif type(v) == type(current) or (v == false and keys and keys[k])
+        or (name == "dim" and type(v) == "boolean")
         or ((name == "margin" or name == "border_size") and (type(v) == "number" or v == false)) then
       into[k] = v
     else
@@ -211,6 +214,10 @@ do
     problems[#problems + 1] = load_err
   end
 
+  if type(config.dim) == "number" and (config.dim < 0 or config.dim > 1) then
+    problems[#problems + 1] = "dim must be between 0 and 1, or true/false"
+    config.dim = 0.18
+  end
   if config.width <= 0 or config.width > 1 then
     problems[#problems + 1] = "width must be between 0 and 1"
     config.width = 0.33
@@ -418,7 +425,13 @@ local special_dim = base_dim
 local function dim_behind(sidebar)
   local value = base_dim
   if sidebar then
-    value = config.dim and (1 - (1 - base_dim) * 0.6) or 0
+    if config.dim == true then
+      value = 1 - (1 - base_dim) * 0.6
+    elseif type(config.dim) == "number" then
+      value = config.dim
+    else
+      value = 0
+    end
   end
   if value ~= special_dim then
     hl.config({ decoration = { dim_special = value } })
@@ -667,7 +680,27 @@ local function remember_restored(address)
   end
 end
 
+-- Hyprland turns shadows on and off for all windows at once, and Omarchy has
+-- them off. So, if they're off: on, with a rule taking them off every window,
+-- which sidebars override. Every other window looks as before. (If you have
+-- shadows on, sidebars already have one.) Large and soft, but faint: on a
+-- dark theme (its colors.toml says `mode = "dark"`) a black shadow barely
+-- shows, so it's darker there to look as faint as on a light one. A theme
+-- change reloads Hyprland, which loads this again.
+local shadow_rule = false
+if config.shadow and hl.get_config("decoration:shadow:enabled") == false then
+  local dark = theme_colors:match('\n%s*mode%s*=%s*"(%a+)"') == "dark"
+  hl.config({ decoration = { shadow = {
+    enabled = true, range = 60, render_power = 2, offset = { 0, 0 },
+    color = dark and "rgba(00000066)" or "rgba(00000030)" } } })
+  hl.window_rule({ match = { class = ".*" }, no_shadow = true })
+  shadow_rule = true
+end
+
 local function style(window)
+  if shadow_rule then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = "0" })
+  end
   dispatch_for(window, hl.dsp.window.set_prop, {
     prop = "rounding", value = config.rounding > 0 and tostring(math.floor(config.rounding)) or "unset" })
   if no_border then
@@ -680,9 +713,12 @@ local function style(window)
 end
 
 local function unstyle(window)
-  -- Unlike a colour, a border size and rounding can be handed back to the config.
+  -- Unlike a colour, these can be handed back to the config (and rules).
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "unset" })
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "rounding", value = "unset" })
+  if shadow_rule then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = "unset" })
+  end
   set_border(window, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
   remember_restored(window.address)
 end

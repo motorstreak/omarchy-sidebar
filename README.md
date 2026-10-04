@@ -92,7 +92,7 @@ options, with their defaults:
 return {
   width = 0.33,          -- default width as a share of the screen
   margin = 32,           -- gap from the sidebar's border to screen edges and the bar (0-200), or false for the same as tiled windows
-  dim = false,           -- true: dim the rest of the screen while a sidebar shows (off, not even Omarchy's light dim)
+  dim = 0.18,            -- dim the rest of the screen while a sidebar shows, 0-1 (0 or false: none; true: strong)
   border = "green",      -- sidebar border: a theme colour name, "theme" (foreground), "#14B9B5", "none", or false for the usual one
   border_size = false,   -- its width: false for Omarchy's, or pixels
   border_opacity = 1,    -- 0 (clear) to 1 (solid), for a colour name or "#rrggbb" border
