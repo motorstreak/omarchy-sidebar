@@ -7,8 +7,8 @@ with saved, searchable sessions when that agent is Claude Code.
 
 You can have several sidebars, one showing at a time: `Super + B` cycles
 through them, each replacing the one before. Sidebars keep a wider gap from the
-screen edges than tiled windows, have the rounded corners of Omarchy's
-popped-out windows, and a border in your theme's green so they stand out
+screen edges than tiled windows, have well-rounded corners, and a border in your
+theme's green so they stand out
 (`margin`, `rounding`, `border`, `border_opacity` and `border_size` in the
 config change it).
 
@@ -94,9 +94,9 @@ return {
   margin = 32,           -- gap from the sidebar's border to screen edges and the bar (0-200), or false for the same as tiled windows
   dim = 0.18,            -- dim the rest of the screen while a sidebar shows, 0-1 (0 or false: none; true: strong)
   border = "green",      -- sidebar border: a theme colour name, "theme" (foreground), "#14B9B5", "none", or false for the usual one
-  border_size = false,   -- its width: false for Omarchy's, or pixels
+  border_size = 6,       -- its width in pixels (Omarchy's windows have 2), or false for Omarchy's
   border_opacity = 1,    -- 0 (clear) to 1 (solid), for a colour name or "#rrggbb" border
-  rounding = 8,          -- sidebars' corner radius, as Omarchy's popped-out windows (Super + O); 0 for square
+  rounding = 32,         -- sidebars' corner radius (Omarchy's popped-out windows have 8); 0 for square
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   switcher = true,       -- false: Super + B cycles sidebars directly, without previews

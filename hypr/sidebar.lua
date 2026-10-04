@@ -101,10 +101,10 @@ local defaults = {
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", "none", or false for the usual
   -- border. (In "background" and wide, it reads as padding around the content.)
   border = "green",
-  border_size = false, -- its width: false for Omarchy's, as on other windows, or pixels
+  border_size = 6, -- its width in pixels (Omarchy's windows have 2), or false for Omarchy's
   border_opacity = 1, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
   shadow = false, -- true: a large, faint shadow around sidebars
-  rounding = 8, -- corner radius of sidebars, as Omarchy's popped-out (SUPER + O) windows; 0 for square
+  rounding = 32, -- corner radius of sidebars (Omarchy's popped-out windows have 8); 0 for square
   click_outside = true, -- clicking outside the shown sidebar hides it
   -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
   -- one animation for every special workspace, so this fades the scratchpad
@@ -228,7 +228,7 @@ do
   end
   if config.rounding < 0 or config.rounding > 50 then
     problems[#problems + 1] = "rounding must be between 0 and 50"
-    config.rounding = 8
+    config.rounding = 32
   end
   if config.border_opacity < 0 or config.border_opacity > 1 then
     problems[#problems + 1] = "border_opacity must be between 0 and 1"
@@ -618,8 +618,17 @@ do
     f:close()
   end
 end
+-- Colour names some themes leave out, giving only the terminal palette
+-- (color0-color15): the standard ANSI slot for each.
+local PALETTE = {
+  red = "color1", green = "color2", yellow = "color3", blue = "color4", magenta = "color5", cyan = "color6",
+  bright_red = "color9", bright_green = "color10", bright_yellow = "color11",
+  bright_blue = "color12", bright_magenta = "color13", bright_cyan = "color14",
+}
 local function theme_colour(name)
-  return theme_colors:match("\n%s*" .. name .. '%s*=%s*"#?(%x%x%x%x%x%x)"')
+  local pattern = '%s*=%s*"#?(%x%x%x%x%x%x)"'
+  return theme_colors:match("\n%s*" .. name .. pattern)
+    or (PALETTE[name] and theme_colors:match("\n%s*" .. PALETTE[name] .. pattern))
 end
 -- The switcher's highlight.
 local theme_foreground = theme_colour("foreground")
@@ -705,10 +714,13 @@ local function style(window)
     prop = "rounding", value = config.rounding > 0 and tostring(math.floor(config.rounding)) or "unset" })
   if no_border then
     dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "0" })
-  elseif sidebar_border then
+  elseif config.border ~= false then
+    -- The width even if the colour wasn't found (the usual colour then).
     dispatch_for(window, hl.dsp.window.set_prop, {
       prop = "border_size", value = config.border_size and tostring(math.floor(config.border_size)) or "unset" })
-    set_border(window, sidebar_border[1], sidebar_border[2])
+    if sidebar_border then
+      set_border(window, sidebar_border[1], sidebar_border[2])
+    end
   end
 end
 
