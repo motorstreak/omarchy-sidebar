@@ -1094,6 +1094,25 @@ end))
 -- dialog, a browser opened from the sidebar, a terminal opened while it had
 -- focus) goes to the regular workspace instead of replacing the sidebar.
 hl.on("window.open", guard("opening a window", function(window)
+  -- Omarchy's screensaver (a fullscreen window per monitor): a sidebar shown
+  -- there would stay on top of it, so it hides. The dispatcher acts on the
+  -- active monitor, which is the one the screensaver is opening on.
+  if window.class == "org.omarchy.screensaver" then
+    local m = hl.get_active_monitor()
+    local shown = m and shown_sidebar(m)
+    if shown and window.monitor and window.monitor.id == m.id then
+      toggle_workspace(shown)
+      -- Hiding hands focus back to the workspace, and the screensaver quits
+      -- when it loses focus: so it gets it back.
+      local address = window.address
+      hl.timer(guard("refocusing the screensaver", function()
+        if current(address) then
+          focus(current(address))
+        end
+      end), { timeout = 20, type = "oneshot" })
+    end
+    return
+  end
   if not in_sidebar(window) then
     return
   end
