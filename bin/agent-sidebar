@@ -2,15 +2,17 @@
 # Launches the agent sidebar (run by hypr/sidebar.lua) with your Omarchy default
 # coding agent (`omarchy default agent`).
 #   agent-sidebar launch   open the sidebar
-#   agent-sidebar new      start a fresh session (SUPER + SHIFT + A)
+#   agent-sidebar new      start a fresh session (SUPER + SHIFT + A), asking for
+#                          its name (empty keeps the timestamp)
 #   agent-sidebar load     pick an earlier session, Claude only (SUPER + ALT + A)
 #
 # Any agent runs through Omarchy's own launcher (`omarchy-agent --inline`), so it
 # starts exactly as SUPER + SHIFT + CTRL + A starts it. Claude Code is the
 # exception: that launcher can't pass session options, so Claude is run
 # directly to keep the sidebar pinned to one session (closing the window and
-# relaunching resumes the same conversation) and to name new sessions with a
-# timestamp so they can be found again here or in Claude's /resume picker.
+# relaunching resumes the same conversation) and to name new sessions (a name
+# you give, or a timestamp) so they can be found again here or in Claude's
+# /resume picker.
 
 class=${SIDEBAR_AGENT_CLASS:-sidebar.agent}
 state_home=${XDG_STATE_HOME:-$HOME/.local/state}
@@ -93,11 +95,39 @@ valid_uuid() {
   [[ $1 =~ ^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$ ]]
 }
 
+# Sessions this sidebar started, by id: the session picker lists these whatever
+# their names (older ones are recognised by their timestamp names).
+sessions_file=$state_dir/sessions
+
+# A new session, named $1 (default: the date and time).
 new_session() {
-  local id
+  local id name=${1:-}
+  [[ -n $name ]] || name=$(date '+%Y-%m-%d %H:%M')
   id=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
-  echo "${id,,}" >"$state_dir/session-id"
-  date '+%Y-%m-%d %H:%M' >"$state_dir/session-name"
+  id=${id,,}
+  echo "$id" >"$state_dir/session-id"
+  echo "$name" >"$state_dir/session-name"
+  echo "$id" >>"$sessions_file"
+}
+
+# Asks for the new session's name (SUPER + SHIFT + A). Empty (or Escape, which
+# the menu reports the same way) keeps the timestamp. Sets new_name.
+ask_name() {
+  local default answer
+  default=$(date '+%Y-%m-%d %H:%M')
+  new_name=$default
+  flock -u 9
+  answer=$(timeout 600 omarchy-menu-input "Name the new session (empty: $default)" --width 500 9>&-)
+  [[ $? == 124 ]] && omarchy menu close >/dev/null 2>&1 9>&-
+  if ! flock -w 5 9; then
+    notify "The sidebar was busy starting; try again"
+    return 1
+  fi
+  # One line, no surrounding spaces, at most 80 characters.
+  answer=${answer//$'\n'/ }
+  answer=$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$answer")
+  [[ -n $answer ]] && new_name=${answer:0:80}
+  return 0
 }
 
 # Claude's transcript for a session in the sidebar's folder (Claude only resumes
@@ -106,22 +136,29 @@ transcript() {
   [[ -f $projects/$1.jsonl ]] && echo "$projects/$1.jsonl"
 }
 
-# Lists the newest sidebar sessions (timestamp-named) as a searchable menu and
+# Lists the newest sidebar sessions as a searchable menu and
 # sets picked_id/picked_name. Returns 1 if nothing was picked.
 pick_session() {
   local current f id title prompt key choice count=0
-  local -A ids=()
+  local -A ids=() ours=()
   local options=()
   current=$(cat "$state_dir/session-id" 2>/dev/null)
+  if [[ -f $sessions_file ]]; then
+    while IFS= read -r id; do
+      [[ -n $id ]] && ours[$id]=1
+    done <"$sessions_file"
+  fi
 
   while IFS= read -r f; do
     # The last title wins (a session can be renamed). One grep pass over the
     # file: reversing whole transcripts to find it was slow with large ones.
     title=$(grep -F '"type":"custom-title"' "$f" | tail -n1 | jq -r '.customTitle // empty' 2>/dev/null)
-    [[ $title =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
+    id=$(basename "$f" .jsonl)
+    # Started here: listed in sessions_file, or (older ones) named by timestamp.
+    [[ -n ${ours[$id]:-} || $title =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
+    [[ -n $title ]] || title=${id:0:8}
     # Sessions without a message can't be resumed; leave them out.
     grep -q '"type":"user"' "$f" || continue
-    id=$(basename "$f" .jsonl)
     # The session's typed prompts, newest first: the menu shows the start of
     # this line and searches all of it. Lines that don't parse (one being
     # written right now) are skipped rather than failing the whole file.
@@ -171,8 +208,13 @@ launch)
   window_open && exit 0
   ;;
 new)
-  close_window || exit 1
-  [[ $agent == claude ]] && new_session
+  if [[ $agent == claude ]]; then
+    ask_name || exit 1
+    close_window || exit 1
+    new_session "$new_name"
+  else
+    close_window || exit 1
+  fi
   ;;
 load)
   if [[ $agent != claude ]]; then
@@ -213,8 +255,8 @@ if [[ $agent == claude ]]; then
     command=(claude --resume "$session")
   elif [[ -n $file || -f ${elsewhere[0]} ]]; then
     # No message yet, or filed under another folder (Claude won't resume it
-    # here): start a fresh session rather than reuse the id.
-    new_session
+    # here): start a fresh session (with the same name) rather than reuse the id.
+    new_session "$name"
     command=(claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")")
   else
     command=(claude --session-id "$session" --name "$name")

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sidebar",
   "name": "Sidebar",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "author": "Navin Samuel",
   "description": "Turn any window into a docked, dimming sidebar you toggle with a key, plus an agent sidebar for your Omarchy default coding agent (with saved sessions for Claude Code).",
   "kinds": [
