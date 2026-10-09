@@ -139,7 +139,7 @@ transcript() {
 # Lists the newest sidebar sessions as a searchable menu and
 # sets picked_id/picked_name. Returns 1 if nothing was picked.
 pick_session() {
-  local current f id title prompt key choice count=0
+  local current f id title titles prompt key choice count=0
   local -A ids=() ours=()
   local options=()
   current=$(cat "$state_dir/session-id" 2>/dev/null)
@@ -152,10 +152,12 @@ pick_session() {
   while IFS= read -r f; do
     # The last title wins (a session can be renamed). One grep pass over the
     # file: reversing whole transcripts to find it was slow with large ones.
-    title=$(grep -F '"type":"custom-title"' "$f" | tail -n1 | jq -r '.customTitle // empty' 2>/dev/null)
+    titles=$(grep -F '"type":"custom-title"' "$f" | jq -r '.customTitle // empty' 2>/dev/null)
+    title=$(tail -n1 <<<"$titles")
     id=$(basename "$f" .jsonl)
-    # Started here: listed in sessions_file, or (older ones) named by timestamp.
-    [[ -n ${ours[$id]:-} || $title =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
+    # Started here: listed in sessions_file, or (older ones) first named by
+    # timestamp; the first name counts, so a later /rename keeps it listed.
+    [[ -n ${ours[$id]:-} || $(head -n1 <<<"$titles") =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
     [[ -n $title ]] || title=${id:0:8}
     # Sessions without a message can't be resumed; leave them out.
     grep -q '"type":"user"' "$f" || continue
