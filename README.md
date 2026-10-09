@@ -36,7 +36,7 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 | `Super + Alt + B` | Make the focused window a sidebar, or a sidebar a normal window again |
 | `Super + B` | With two or more sidebars: live previews of them all in the middle of the screen. Keep `Super` held and press `B` again to move along; let go of `Super` to show the highlighted one (`Super + Escape` cancels). The first one highlighted is the sidebar you used last, or the next one if a sidebar is showing, so a quick tap works as before. With just one, show/hide it |
 | `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
-| `Super + Shift + A` | New agent session (Claude: asks for its name; empty keeps the date and time) |
+| `Super + Shift + A` | New agent session (Claude: asks for its name, empty keeps the date and time; or starts the session a waiting question was handed off to) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts) |
 | `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default size, back against its edge at full height (forgets where you moved it; the edge stays) |
 
@@ -145,6 +145,17 @@ the date and time. Once they have a message, sessions show up in the
 Claude's `/resume` picker. The menu lists the sessions the sidebar started, so
 renaming one later with Claude's `/rename` keeps it there. It uses your normal Claude settings rather than the auto permission
 mode Omarchy's launcher starts Claude in.
+
+To move a new topic into its own session, Claude (or anything else) can leave
+the question waiting:
+
+```bash
+echo "How do I set the MTU on wg0?" | agent-sidebar handoff "NordVPN MTU on wg0"
+```
+
+The next `Super + Shift + A`, within an hour, offers to start a session with
+that name and the question already sent, or an empty one as usual. The script
+is at `~/.config/omarchy/plugins/sidebar/bin/agent-sidebar`.
 
 ## Requirements
 

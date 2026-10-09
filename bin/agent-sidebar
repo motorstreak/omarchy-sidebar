@@ -5,6 +5,11 @@
 #   agent-sidebar new      start a fresh session (SUPER + SHIFT + A), asking for
 #                          its name (empty keeps the timestamp)
 #   agent-sidebar load     pick an earlier session, Claude only (SUPER + ALT + A)
+#   agent-sidebar handoff NAME
+#                          Claude only: the next SUPER + SHIFT + A (within an
+#                          hour) offers a session named NAME that starts with
+#                          the question read from stdin (for moving a new
+#                          topic out of the current session)
 #
 # Any agent runs through Omarchy's own launcher (`omarchy-agent --inline`), so it
 # starts exactly as SUPER + SHIFT + CTRL + A starts it. Claude Code is the
@@ -22,6 +27,41 @@ claude_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 notify() {
   notify-send -a Sidebar -- "Agent sidebar" "$1" 9>&-
 }
+
+# A question waiting for its own session: its name, and the question itself.
+handoff_name=$state_dir/handoff-name
+handoff_prompt=$state_dir/handoff-prompt
+first_prompt=$state_dir/first-prompt
+
+case ${1:-} in
+handoff)
+  name=${2:-}
+  name=${name//$'\n'/ }
+  if [[ -z $name ]]; then
+    echo "Usage: agent-sidebar handoff NAME < question" >&2
+    exit 1
+  fi
+  mkdir -p "$state_dir"
+  cat >"$handoff_prompt"
+  if [[ ! -s $handoff_prompt ]]; then
+    rm -f "$handoff_prompt"
+    echo "agent-sidebar handoff: no question on stdin" >&2
+    exit 1
+  fi
+  echo "${name:0:80}" >"$handoff_name"
+  exit 0
+  ;;
+first-prompt)
+  # Run in the sidebar's terminal: start the new session with the waiting
+  # question. It comes from a file, so quotes and line breaks reach Claude
+  # untouched (a terminal's -e can mangle them).
+  prompt=$(<"$first_prompt")
+  rm -f "$first_prompt"
+  # A question starting with "-" would be read as an option.
+  [[ $prompt == -* ]] && prompt=" $prompt"
+  exec claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")" "$prompt"
+  ;;
+esac
 
 # Starting the agent raises the dim behind sidebars ahead of it showing (see
 # hypr/sidebar.lua). However this ends (a cancelled menu, a failed start, the
@@ -130,6 +170,39 @@ ask_name() {
   return 0
 }
 
+# A question waiting from `agent-sidebar handoff` (in the last hour): offers its
+# session or an empty one. Sets new_name and moves the question to first_prompt
+# when it's taken; returns 1 if the menu was dismissed, 2 for an empty session.
+offer_handoff() {
+  local name choice take empty="Start an empty session"
+  [[ -s $handoff_prompt && -s $handoff_name ]] || return 2
+  if [[ -z $(find "$handoff_prompt" -mmin -60) ]]; then
+    rm -f "$handoff_prompt" "$handoff_name"
+    return 2
+  fi
+  name=$(<"$handoff_name")
+  take="Start \"$name\" with your question"
+  flock -u 9
+  choice=$(timeout 600 omarchy-menu-select "New session" "$take" "$empty" -- --width 500 9>&-)
+  [[ $? == 124 ]] && omarchy menu close >/dev/null 2>&1 9>&-
+  if ! flock -w 5 9; then
+    notify "The sidebar was busy starting; try again"
+    return 1
+  fi
+  case $choice in
+  "$take")
+    new_name=$name
+    mv -f "$handoff_prompt" "$first_prompt"
+    rm -f "$handoff_name"
+    ;;
+  "$empty")
+    rm -f "$handoff_prompt" "$handoff_name"
+    return 2
+    ;;
+  *) return 1 ;;
+  esac
+}
+
 # Claude's transcript for a session in the sidebar's folder (Claude only resumes
 # a session from the directory it was started in).
 transcript() {
@@ -211,7 +284,13 @@ launch)
   ;;
 new)
   if [[ $agent == claude ]]; then
-    ask_name || exit 1
+    rm -f "$first_prompt"
+    offer_handoff
+    case $? in
+    0) ;;
+    2) ask_name || exit 1 ;;
+    *) exit 0 ;;
+    esac
     close_window || exit 1
     new_session "$new_name"
   else
@@ -260,9 +339,14 @@ if [[ $agent == claude ]]; then
     # here): start a fresh session (with the same name) rather than reuse the id.
     new_session "$name"
     command=(claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")")
+  elif [[ -s $first_prompt ]]; then
+    # A new session for a waiting question (offer_handoff).
+    command=("$(readlink -f "$0")" first-prompt)
   else
     command=(claude --session-id "$session" --name "$name")
   fi
+  # A question is only for the session started for it.
+  [[ ${command[1]:-} == first-prompt ]] || rm -f "$first_prompt"
 else
   command=(omarchy-agent --inline)
 fi
