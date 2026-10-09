@@ -111,13 +111,41 @@ if ! flock -n 9; then
   exit 0
 fi
 
+# Each Claude session's window has its own class ("<class>.<first 8 of its id>"),
+# so moving to another session leaves the one before running, hidden, to come
+# back to. Other agents use the plain class. A window from before 0.14.0 has the
+# plain class too: legacy-session records which session it runs.
+legacy_file=$state_dir/legacy-session
+
+session_class() {
+  if [[ $agent == claude ]]; then
+    echo "$class.${1:0:8}"
+  else
+    echo "$class"
+  fi
+}
+
+# The windows of session $1 (default: the current one).
 windows() {
-  hyprctl clients -j | jq -r --arg c "$class" '.[] | select(.class == $c) | .address'
+  local session=${1-$(cat "$state_dir/session-id" 2>/dev/null)} legacy=false
+  [[ $agent == claude && -n $session && $session == "$(cat "$legacy_file" 2>/dev/null)" ]] && legacy=true
+  hyprctl clients -j | jq -r --arg c "$(session_class "$session")" --arg b "$class" --argjson l "$legacy" \
+    '.[] | select(.class == $c or ($l and .class == $b)) | .address'
 }
 
 window_open() {
-  [[ -n $(windows) ]]
+  [[ -n $(windows "$@") ]]
 }
+
+# A plain-class Claude window from before 0.14.0 runs the session that was
+# current when it was first seen; once it's gone, there's nothing to record.
+if [[ $agent == claude ]]; then
+  if [[ -z $(hyprctl clients -j | jq -r --arg b "$class" '.[] | select(.class == $b) | .address') ]]; then
+    rm -f "$legacy_file"
+  elif [[ ! -f $legacy_file && -s $state_dir/session-id ]]; then
+    cp "$state_dir/session-id" "$legacy_file"
+  fi
+fi
 
 # Fails (and says so) if the window won't close, so callers don't switch
 # sessions and launch a second sidebar next to it.
@@ -291,7 +319,12 @@ new)
     2) ask_name || exit 1 ;;
     *) exit 0 ;;
     esac
-    close_window || exit 1
+    # The session before stays running, hidden (Super + Alt + A brings it
+    # back) — unless it has no message yet: nothing to come back to.
+    file=$(transcript "$(cat "$state_dir/session-id" 2>/dev/null)")
+    if [[ -z $file ]] || ! grep -q '"type":"user"' "$file"; then
+      close_window || exit 1
+    fi
     new_session "$new_name"
   else
     close_window || exit 1
@@ -303,13 +336,14 @@ load)
     exit 0
   fi
   pick_session || exit 0
-  if [[ $picked_id == "$(cat "$state_dir/session-id" 2>/dev/null)" ]] && window_open; then
+  # The session before stays running, hidden. The picked one: shown if it's
+  # still running, otherwise resumed below.
+  echo "$picked_id" >"$state_dir/session-id"
+  echo "$picked_name" >"$state_dir/session-name"
+  if window_open; then
     hyprctl eval 'sidebar.show("agent")' >/dev/null
     exit 0
   fi
-  close_window || exit 1
-  echo "$picked_id" >"$state_dir/session-id"
-  echo "$picked_name" >"$state_dir/session-name"
   ;;
 *)
   echo "Usage: agent-sidebar [launch|new|load]" >&2
@@ -355,7 +389,7 @@ fi
 # minute) and has stayed open a moment, so an agent that fails at once is
 # reported, and a second press meanwhile can't start a second agent on the
 # same session; the terminal mustn't inherit the lock.
-omarchy-launch-tui --app-id="$class" "${command[@]}" 9>&- &
+omarchy-launch-tui --app-id="$(session_class "$(cat "$state_dir/session-id" 2>/dev/null)")" "${command[@]}" 9>&- &
 for _ in {1..600}; do
   if window_open; then
     sleep 1

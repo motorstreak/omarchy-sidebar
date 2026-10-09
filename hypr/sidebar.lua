@@ -300,8 +300,11 @@ if config.fade then
   hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint", style = "fade" })
 end
 
+-- The agent's windows: its class, or for Claude "<class>.<session>" (each
+-- session has its own window; see bin/agent-sidebar).
 local function is_agent(window)
-  return agent_class ~= nil and window ~= nil and window.class == agent_class
+  local class = agent_class ~= nil and window ~= nil and window.class
+  return class and (class == agent_class or class:sub(1, #agent_class + 1) == agent_class .. ".") or false
 end
 
 -- Escape and the remembered place are per kind: the agent, or any other window.
@@ -1266,14 +1269,37 @@ local function show(window)
   focus(window)
 end
 
+local function read_line(path)
+  local f = io.open(path, "r")
+  if f == nil then
+    return nil
+  end
+  local line = f:read("l")
+  f:close()
+  return line
+end
+
+-- The current session's window (bin/agent-sidebar keeps the earlier ones
+-- running, hidden). A window with the plain class is another agent's, or a
+-- Claude window from before 0.14.0: current unless legacy-session says it runs
+-- another session.
 local function agent_window()
   if agent_class == nil then
     return nil
   end
+  local session = read_line(state_root .. "/agent/session-id") or ""
+  local legacy = read_line(state_root .. "/agent/legacy-session")
+  local own = agent_class .. "." .. session:sub(1, 8)
+  local plain
   for _, w in ipairs(hl.get_windows()) do
-    if w.class == agent_class then
+    if session ~= "" and w.class == own then
       return w
+    elseif w.class == agent_class then
+      plain = w
     end
+  end
+  if plain and (legacy == nil or legacy == session) then
+    return plain
   end
 end
 
@@ -1550,7 +1576,8 @@ if agent_class then
   end
 
   -- Escape every regex metacharacter so the class matches literally.
-  local class_pattern = "^" .. agent_class:gsub("[%^%$%(%)%.%[%]%*%+%-%?%{%}|\\]", "\\%0") .. "$"
+  -- Matches the plain class and each Claude session's "<class>.<session>".
+  local class_pattern = "^" .. agent_class:gsub("[%^%$%(%)%.%[%]%*%+%-%?%{%}|\\]", "\\%0") .. "(\\..+)?$"
   hl.window_rule({
     match = { class = class_pattern },
     float = true,
