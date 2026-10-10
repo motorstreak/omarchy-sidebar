@@ -28,6 +28,26 @@ notify() {
   notify-send -a Sidebar -- "Agent sidebar" "$1" 9>&-
 }
 
+# Claude in the terminal's own 16 colours, so it follows the theme the sidebar
+# paints its terminal in (bin/sidebar-theme) the moment one is picked, as cliamp
+# does; its usual themes use fixed colours. Light or dark by the agent's theme
+# (or Omarchy's): colors.toml says `mode = "light"`.
+ansi_theme() {
+  local name colors="$state_home/omarchy/current/theme/colors.toml" root
+  name=$(head -n1 "$state_home/omarchy-sidebar/themes/agent" 2>/dev/null)
+  if [[ $name =~ ^[A-Za-z0-9._-]+$ ]]; then
+    for root in "$HOME/.config/omarchy/themes" "${OMARCHY_PATH:-/usr/share/omarchy}/themes"; do
+      [[ -f $root/$name/colors.toml ]] && colors=$root/$name/colors.toml && break
+    done
+  fi
+  if grep -qE '^\s*mode\s*=\s*"light"' "$colors" 2>/dev/null; then
+    echo light-ansi
+  else
+    echo dark-ansi
+  fi
+}
+claude=(claude --settings "{\"theme\":\"$(ansi_theme)\"}")
+
 # A question waiting for its own session: its name, and the question itself.
 handoff_name=$state_dir/handoff-name
 handoff_prompt=$state_dir/handoff-prompt
@@ -59,7 +79,7 @@ first-prompt)
   rm -f "$first_prompt"
   # A question starting with "-" would be read as an option.
   [[ $prompt == -* ]] && prompt=" $prompt"
-  exec claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")" "$prompt"
+  exec "${claude[@]}" --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")" "$prompt"
   ;;
 esac
 
@@ -367,17 +387,17 @@ if [[ $agent == claude ]]; then
   file=$(transcript "$session")
   elsewhere=("$claude_dir"/projects/*/"$session".jsonl)
   if [[ -n $file ]] && grep -q '"type":"user"' "$file"; then
-    command=(claude --resume "$session")
+    command=("${claude[@]}" --resume "$session")
   elif [[ -n $file || -f ${elsewhere[0]} ]]; then
     # No message yet, or filed under another folder (Claude won't resume it
     # here): start a fresh session (with the same name) rather than reuse the id.
     new_session "$name"
-    command=(claude --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")")
+    command=("${claude[@]}" --session-id "$(<"$state_dir/session-id")" --name "$(<"$state_dir/session-name")")
   elif [[ -s $first_prompt ]]; then
     # A new session for a waiting question (offer_handoff).
     command=("$(readlink -f "$0")" first-prompt)
   else
-    command=(claude --session-id "$session" --name "$name")
+    command=("${claude[@]}" --session-id "$session" --name "$name")
   fi
   # A question is only for the session started for it.
   [[ ${command[1]:-} == first-prompt ]] || rm -f "$first_prompt"
