@@ -9,7 +9,8 @@ import qs.Commons
 
 // The sidebar switcher (SUPER + TAB with two or more sidebars): live previews of
 // every sidebar in the middle of the focused screen over a dimmed backdrop,
-// styled like Omarchy's theme and background picker. hypr/sidebar.lua owns
+// styled like Omarchy's theme and background picker ("cards") or as a cover
+// flow ("coverflow"; SUPER + T swaps them while it's open). hypr/sidebar.lua owns
 // the keys and the choice; it sends the whole state with each change. It takes
 // no keyboard focus and no clicks, so SUPER's release still reaches Hyprland.
 Scope {
@@ -21,6 +22,7 @@ Scope {
   property int index: 0
   property var items: []
   property string monitor: ""
+  property string style: "cards"
 
   // Messages come from separate processes and can arrive out of order: only a
   // newer one counts. Each load of sidebar.lua numbers them afresh under a new
@@ -50,6 +52,7 @@ Scope {
     // on opening, so new sidebars still have previews.
     if (!open) Hyprland.refreshToplevels()
     monitor = p.monitor || ""
+    style = p.style === "coverflow" ? "coverflow" : "cards"
     items = p.items
     index = p.index
     open = true
@@ -137,16 +140,24 @@ Scope {
       readonly property var chosenItem: root.items[root.index] || null
       readonly property real chosenWidth: chosenItem ? cardWidth(chosenItem) : 0
 
+      // Each look fades in and out on its own; its previews are dropped once it
+      // (or the whole switcher) has faded out, so nothing hidden is captured.
+      function shows(look, view) {
+        return (root.open || content.opacity > 0) && (root.style === look || view.opacity > 0)
+      }
+
       Item {
         id: carousel
         anchors.centerIn: parent
         anchors.verticalCenterOffset: -20
         width: content.chosenWidth
         height: content.expandedHeight
+        opacity: root.style === "cards" ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
         Repeater {
-          // Dropped once faded out, so nothing is captured while it's closed.
-          model: root.open || content.opacity > 0 ? root.items : []
+          model: content.shows("cards", carousel) ? root.items : []
 
           delegate: Item {
             id: card
@@ -242,12 +253,142 @@ Scope {
         }
       }
 
+      // Cover flow: the highlighted sidebar faces you in the middle, the others
+      // turned away on either side, overlapping, each over a faint reflection.
+      // Moving along glides them round.
+      readonly property int flowHeight: 440
+      readonly property int flowGap: 70 // from the middle card's edge to the first one beside it
+      readonly property int flowStep: 96 // between the ones further out
+      readonly property real flowAngle: 58
+      readonly property real flowReflection: 0.3 // of a card's height
+      function flowWidth(it) {
+        return Math.max(240, Math.min(640, flowHeight * (it.width / Math.max(1, it.height))))
+      }
+      readonly property real flowChosenWidth: chosenItem ? flowWidth(chosenItem) : 0
+
+      Item {
+        id: flow
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: -50
+        width: content.flowChosenWidth
+        height: content.flowHeight
+        opacity: root.style === "coverflow" ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
+        Repeater {
+          model: content.shows("coverflow", flow) ? root.items : []
+
+          delegate: Item {
+            id: tile
+            required property var modelData
+            required property int index
+
+            readonly property int relative: index - root.index
+            readonly property bool chosen: relative === 0
+            readonly property int side: relative < 0 ? -1 : (relative > 0 ? 1 : 0)
+            readonly property real aspect: modelData.width / Math.max(1, modelData.height)
+
+            width: content.flowWidth(modelData)
+            height: content.flowHeight
+            // Centred on its spot: the middle, or out to the side.
+            x: flow.width / 2 - width / 2 + (side === 0 ? 0
+              : side * (content.flowChosenWidth / 2 + content.flowGap + (Math.abs(relative) - 1) * content.flowStep))
+            z: 100 - Math.abs(relative)
+            scale: chosen ? 1 : 0.88
+            property real angle: -side * content.flowAngle
+
+            Behavior on x { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on angle { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+
+            transform: Rotation {
+              origin.x: tile.width / 2
+              origin.y: tile.height / 2
+              axis { x: 0; y: 1; z: 0 }
+              angle: tile.angle
+            }
+
+            Item {
+              id: face
+              width: tile.width
+              height: tile.height
+              clip: true
+
+              Rectangle {
+                anchors.fill: parent
+                color: Color.background
+              }
+
+              // The window filling the card, cropped to it.
+              ScreencopyView {
+                anchors.centerIn: parent
+                width: Math.max(tile.width, tile.height * tile.aspect)
+                height: width / tile.aspect
+                captureSource: root.capture(tile.modelData.address)
+                live: true
+              }
+
+              Rectangle {
+                anchors.fill: parent
+                color: Util.alpha(Color.background, tile.chosen ? 0 : 0.42)
+                Behavior on color { ColorAnimation { duration: 280 } }
+              }
+
+              Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.color: tile.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
+                border.width: tile.chosen ? 3 : 1
+              }
+            }
+
+            // The bottom of the card, upside down beneath it, fading out.
+            Item {
+              id: reflection
+              y: face.height + 6
+              width: face.width
+              height: Math.round(face.height * content.flowReflection)
+              opacity: 0.35
+              layer.enabled: true
+              layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: fade
+                maskThresholdMin: 0.0
+                maskSpreadAtMin: 1.0
+              }
+
+              ShaderEffectSource {
+                anchors.fill: parent
+                sourceItem: face
+                sourceRect: Qt.rect(0, face.height - reflection.height, face.width, reflection.height)
+                transform: Scale { origin.y: reflection.height / 2; yScale: -1 }
+              }
+            }
+
+            Rectangle {
+              id: fade
+              width: reflection.width
+              height: reflection.height
+              visible: false
+              layer.enabled: true
+              gradient: Gradient {
+                GradientStop { position: 0.0; color: "white" }
+                GradientStop { position: 1.0; color: "transparent" }
+              }
+            }
+          }
+        }
+      }
+
       Text {
         textFormat: Text.PlainText
-        anchors.top: carousel.bottom
-        anchors.topMargin: Style.space(16)
+        anchors.top: root.style === "coverflow" ? flow.bottom : carousel.bottom
+        anchors.topMargin: root.style === "coverflow"
+          ? Math.round(content.flowHeight * content.flowReflection) + Style.space(16)
+          : Style.space(16)
         anchors.horizontalCenter: carousel.horizontalCenter
-        width: Math.max(content.chosenWidth, 480)
+        width: Math.max(root.style === "coverflow" ? content.flowChosenWidth : content.chosenWidth, 480)
         text: content.chosenItem ? content.chosenItem.title : ""
         color: Color.imagePicker.text
         style: Text.Outline

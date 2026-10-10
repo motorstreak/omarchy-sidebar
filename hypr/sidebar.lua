@@ -118,6 +118,10 @@ local defaults = {
   -- With two or more sidebars, SUPER + TAB shows live previews of them all in
   -- the middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
+  -- The switcher's look: "cards" (slanted, like Omarchy's background picker)
+  -- or "coverflow" (the others turned in 3D on either side, with a
+  -- reflection). SUPER + T while it's open swaps them, and that's remembered.
+  switcher_style = "cards",
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -226,6 +230,10 @@ do
   if type(config.dim) == "number" and (config.dim < 0 or config.dim > 1) then
     problems[#problems + 1] = "dim must be between 0 and 1, or true/false"
     config.dim = 0.55
+  end
+  if config.switcher_style ~= "cards" and config.switcher_style ~= "coverflow" then
+    problems[#problems + 1] = 'switcher_style must be "cards" or "coverflow"'
+    config.switcher_style = "cards"
   end
   if config.width <= 0 or config.width > 1 then
     problems[#problems + 1] = "width must be between 0 and 1"
@@ -1605,6 +1613,16 @@ local switcher_seq = 0
 math.randomseed(os.time() + math.floor(os.clock() * 1000000))
 local switcher_session = string.format("%d-%d", os.time(), math.random(1, 1000000000))
 
+-- SUPER + T while the switcher is open swaps its look; Omarchy's floating
+-- toggle (default/hypr/bindings/tiling.lua) comes back when it closes. The look
+-- chosen last is kept in switcher-style, over the `switcher_style` option.
+local STYLE_KEY = { "SUPER + T", "Toggle window floating/tiling" }
+local style_file = state_root .. "/switcher-style"
+local switcher_style = read_line(style_file)
+if switcher_style ~= "cards" and switcher_style ~= "coverflow" then
+  switcher_style = config.switcher_style
+end
+
 local function json_string(value)
   local escaped = tostring(value):gsub('[%c"\\]', function(c)
     local named = { ['"'] = '\\"', ["\\"] = "\\\\", ["\n"] = "\\n", ["\t"] = "\\t", ["\r"] = "\\r" }
@@ -1626,9 +1644,9 @@ local function switcher_update()
       json_string(w.address), json_string(w.title or w.class or ""), w.size.x, w.size.y)
   end
   local monitor = hl.get_active_monitor()
-  switcher_send("show", string.format('{"session":%s,"seq":%d,"index":%d,"monitor":%s,"items":[%s]}',
+  switcher_send("show", string.format('{"session":%s,"seq":%d,"index":%d,"monitor":%s,"style":%s,"items":[%s]}',
     json_string(switcher_session), switcher.seq, switcher.index - 1,
-    json_string(monitor and monitor.name or ""), table.concat(items, ",")))
+    json_string(monitor and monitor.name or ""), json_string(switcher_style), table.concat(items, ",")))
 end
 
 local function switcher_close()
@@ -1638,6 +1656,8 @@ local function switcher_close()
   if omarchy_default_bindings ~= false then
     hl.unbind(HIDE_KEY)
     escape_bound = nil -- sync_keys binds HIDE_KEY afresh, whichever way it wants
+    hl.unbind(STYLE_KEY[1])
+    o.bind(STYLE_KEY[1], STYLE_KEY[2], hl.dsp.window.float({ action = "toggle" }))
   end
   switcher_seq = switcher_seq + 1
   switcher_send("close", switcher_session .. " " .. switcher_seq)
@@ -1689,6 +1709,19 @@ local function switcher_open(list, index)
   if omarchy_default_bindings ~= false then
     hl.unbind(HIDE_KEY)
     hl.bind(HIDE_KEY, guard("closing the switcher", switcher_close), { description = "Close the sidebar switcher" })
+    hl.unbind(STYLE_KEY[1])
+    hl.bind(STYLE_KEY[1], guard("changing the switcher's look", function()
+      if switcher == nil then
+        return
+      end
+      switcher_style = switcher_style == "coverflow" and "cards" or "coverflow"
+      local f = io.open(style_file, "w")
+      if f then
+        f:write(switcher_style, "\n")
+        f:close()
+      end
+      switcher_update()
+    end), { description = "Switcher look: cards / coverflow" })
   end
   switcher_update()
 end
