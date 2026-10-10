@@ -1,12 +1,15 @@
 import QtQuick
+import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
+import qs.Commons
 
 // The sidebar switcher (SUPER + B with two or more sidebars): live previews of
-// every sidebar in the middle of the focused screen over a dimmed backdrop, the
-// highlighted one framed in the sidebar border colour. hypr/sidebar.lua owns
+// every sidebar in the middle of the focused screen over a dimmed backdrop,
+// styled like Omarchy's theme and background picker. hypr/sidebar.lua owns
 // the keys and the choice; it sends the whole state with each change. It takes
 // no keyboard focus and no clicks, so SUPER's release still reaches Hyprland.
 Scope {
@@ -17,7 +20,6 @@ Scope {
   property int seq: -1
   property int index: 0
   property var items: []
-  property color accent: "white"
   property string monitor: ""
 
   // Messages come from separate processes and can arrive out of order: only a
@@ -50,7 +52,6 @@ Scope {
     monitor = p.monitor || ""
     items = p.items
     index = p.index
-    accent = p.accent || "white"
     open = true
   }
 
@@ -99,6 +100,9 @@ Scope {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region {}
 
+    // Laid out like Omarchy's theme and background picker: the highlighted
+    // sidebar as a large slanted card, the others as narrow slanted slices
+    // overlapping on either side, in the picker's colours.
     Item {
       id: content
       anchors.fill: parent
@@ -107,71 +111,144 @@ Scope {
 
       Rectangle {
         anchors.fill: parent
-        color: "black"
-        opacity: 0.45
+        color: Color.imagePicker.scrim
       }
 
-      // Each preview keeps its window's shape at a common height, shrunk
-      // together if the row would be wider than the screen allows.
-      readonly property real gap: 28
-      readonly property real labelHeight: 34
-      readonly property real baseHeight: panel.height * 0.42
-      readonly property real naturalWidth: {
-        var total = 0
-        for (var i = 0; i < root.items.length; i++) {
-          var it = root.items[i]
-          total += baseHeight * (it.width / Math.max(1, it.height))
-        }
-        return total + gap * Math.max(0, root.items.length - 1)
-      }
-      readonly property real fit: Math.min(1, (panel.width * 0.85) / Math.max(1, naturalWidth))
+      readonly property int expandedHeight: 475
+      readonly property int sliceWidth: 108
+      readonly property int sliceHeight: 432
+      readonly property int sliceSpacing: -30
+      readonly property int skewOffset: 28
+      readonly property real step: sliceWidth + sliceSpacing
 
-      Row {
+      // The highlighted card keeps its window's shape at the picker's height.
+      function cardWidth(it) {
+        var w = expandedHeight * (it.width / Math.max(1, it.height))
+        return Math.max(260, Math.min(768, w))
+      }
+
+      readonly property var chosenItem: root.items[root.index] || null
+      readonly property real chosenWidth: chosenItem ? cardWidth(chosenItem) : 0
+
+      Item {
+        id: carousel
         anchors.centerIn: parent
-        spacing: content.gap * content.fit
+        anchors.verticalCenterOffset: -20
+        width: content.chosenWidth
+        height: content.expandedHeight
 
         Repeater {
           // Dropped once faded out, so nothing is captured while it's closed.
           model: root.open || content.opacity > 0 ? root.items : []
 
-          Column {
+          delegate: Item {
             id: card
             required property var modelData
             required property int index
-            readonly property bool chosen: index === root.index
-            readonly property real previewHeight: content.baseHeight * content.fit
-            readonly property real previewWidth: previewHeight * (modelData.width / Math.max(1, modelData.height))
-            spacing: 10
 
-            Rectangle {
-              width: card.previewWidth + 12
-              height: card.previewHeight + 12
-              color: "#1a1a1a"
-              border.width: card.chosen ? 4 : 1
-              border.color: card.chosen ? root.accent : Qt.rgba(1, 1, 1, 0.25)
-              opacity: card.chosen ? 1 : 0.7
-              Behavior on opacity { NumberAnimation { duration: 90 } }
+            readonly property int relative: index - root.index
+            readonly property bool chosen: relative === 0
+            // The window at the highlighted card's size; a slice shows its middle.
+            readonly property real fullWidth: content.cardWidth(modelData)
 
-              ScreencopyView {
+            x: chosen ? 0 : (relative < 0
+              ? relative * content.step
+              : content.chosenWidth + content.sliceSpacing + (relative - 1) * content.step)
+            y: chosen ? 0 : (content.expandedHeight - content.sliceHeight) / 2
+            z: chosen ? 100 : 50 - Math.min(Math.abs(relative), 40)
+            width: chosen ? fullWidth : content.sliceWidth
+            height: chosen ? content.expandedHeight : content.sliceHeight
+
+            readonly property real topLeft: content.skewOffset
+            readonly property real topRight: width
+            readonly property real bottomRight: width - content.skewOffset
+            readonly property real bottomLeft: 0
+
+            Item {
+              id: maskShape
+              anchors.fill: parent
+              visible: false
+              layer.enabled: true
+
+              Shape {
                 anchors.fill: parent
-                anchors.margins: 6
-                captureSource: root.capture(card.modelData.address)
-                live: true
+                antialiasing: true
+                preferredRendererType: Shape.CurveRenderer
+                ShapePath {
+                  fillColor: "white"
+                  strokeColor: "transparent"
+                  startX: card.topLeft; startY: 0
+                  PathLine { x: card.topRight; y: 0 }
+                  PathLine { x: card.bottomRight; y: card.height }
+                  PathLine { x: card.bottomLeft; y: card.height }
+                  PathLine { x: card.topLeft; y: 0 }
+                }
               }
             }
 
-            Text {
-              width: card.previewWidth + 12
-              height: content.labelHeight
-              horizontalAlignment: Text.AlignHCenter
-              elide: Text.ElideRight
-              text: card.modelData.title
-              color: card.chosen ? "white" : Qt.rgba(1, 1, 1, 0.6)
-              font.pixelSize: 15
-              font.bold: card.chosen
+            Item {
+              anchors.fill: parent
+              layer.enabled: true
+              layer.smooth: true
+              layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: maskShape
+                maskThresholdMin: 0.3
+                maskSpreadAtMin: 0.3
+              }
+
+              Rectangle {
+                anchors.fill: parent
+                color: Color.background
+              }
+
+              ScreencopyView {
+                anchors.centerIn: parent
+                width: card.fullWidth
+                height: content.expandedHeight
+                captureSource: root.capture(card.modelData.address)
+                live: true
+              }
+
+              Rectangle {
+                anchors.fill: parent
+                color: Util.alpha(Color.background, card.chosen ? 0 : 0.42)
+              }
+            }
+
+            Shape {
+              anchors.fill: parent
+              antialiasing: true
+              preferredRendererType: Shape.CurveRenderer
+              ShapePath {
+                fillColor: "transparent"
+                strokeColor: card.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
+                strokeWidth: card.chosen ? 3 : 1
+                startX: card.topLeft; startY: 0
+                PathLine { x: card.topRight; y: 0 }
+                PathLine { x: card.bottomRight; y: card.height }
+                PathLine { x: card.bottomLeft; y: card.height }
+                PathLine { x: card.topLeft; y: 0 }
+              }
             }
           }
         }
+      }
+
+      Text {
+        textFormat: Text.PlainText
+        anchors.top: carousel.bottom
+        anchors.topMargin: Style.space(16)
+        anchors.horizontalCenter: carousel.horizontalCenter
+        width: Math.max(content.chosenWidth, 480)
+        text: content.chosenItem ? content.chosenItem.title : ""
+        color: Color.imagePicker.text
+        style: Text.Outline
+        styleColor: Util.alpha(Color.background, 0.7)
+        font.pixelSize: Style.font.display
+        font.weight: Font.DemiBold
+        horizontalAlignment: Text.AlignHCenter
+        elide: Text.ElideRight
       }
     }
   }
