@@ -1856,6 +1856,8 @@ sidebar = {
     end
     return false
   end,
+  -- SUPER + ESCAPE, for testing without keys.
+  hide = hide_shown,
   convert = convert,
   swap = swap,
   dock = dock_to,
