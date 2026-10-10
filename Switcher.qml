@@ -117,6 +117,14 @@ Scope {
         color: Color.imagePicker.scrim
       }
 
+      // Cover flow darkens the screen further, so the covers stand out.
+      Rectangle {
+        anchors.fill: parent
+        color: "black"
+        opacity: root.style === "coverflow" ? 0.55 : 0
+        Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+      }
+
       readonly property int expandedHeight: 475
       readonly property int sliceWidth: 108
       readonly property int sliceHeight: 432
@@ -261,6 +269,7 @@ Scope {
       readonly property int flowStep: 96 // between the ones further out
       readonly property real flowAngle: 58
       readonly property real flowReflection: 0.3 // of a card's height
+      readonly property int flowRadius: 18
       function flowWidth(it) {
         return Math.max(240, Math.min(640, flowHeight * (it.width / Math.max(1, it.height))))
       }
@@ -269,7 +278,7 @@ Scope {
       Item {
         id: flow
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: -50
+        anchors.verticalCenterOffset: -10
         width: content.flowChosenWidth
         height: content.flowHeight
         opacity: root.style === "coverflow" ? 1 : 0
@@ -309,11 +318,28 @@ Scope {
               angle: tile.angle
             }
 
+            Rectangle {
+              id: corners
+              width: tile.width
+              height: tile.height
+              radius: content.flowRadius
+              visible: false
+              layer.enabled: true
+            }
+
             Item {
               id: face
               width: tile.width
               height: tile.height
               clip: true
+              layer.enabled: true
+              layer.smooth: true
+              layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: corners
+                maskThresholdMin: 0.3
+                maskSpreadAtMin: 0.3
+              }
 
               Rectangle {
                 anchors.fill: parent
@@ -335,12 +361,14 @@ Scope {
                 Behavior on color { ColorAnimation { duration: 280 } }
               }
 
-              Rectangle {
-                anchors.fill: parent
-                color: "transparent"
-                border.color: tile.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
-                border.width: tile.chosen ? 3 : 1
-              }
+            }
+
+            Rectangle {
+              anchors.fill: face
+              radius: content.flowRadius
+              color: "transparent"
+              border.color: tile.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
+              border.width: tile.chosen ? 3 : 1
             }
 
             // The bottom of the card, upside down beneath it, fading out.
@@ -349,7 +377,7 @@ Scope {
               y: face.height + 6
               width: face.width
               height: Math.round(face.height * content.flowReflection)
-              opacity: 0.35
+              opacity: 0.22
               layer.enabled: true
               layer.effect: MultiEffect {
                 maskEnabled: true
@@ -374,7 +402,7 @@ Scope {
               layer.enabled: true
               gradient: Gradient {
                 GradientStop { position: 0.0; color: "white" }
-                GradientStop { position: 1.0; color: "transparent" }
+                GradientStop { position: 0.75; color: "transparent" }
               }
             }
           }
@@ -383,10 +411,10 @@ Scope {
 
       Text {
         textFormat: Text.PlainText
-        anchors.top: root.style === "coverflow" ? flow.bottom : carousel.bottom
-        anchors.topMargin: root.style === "coverflow"
-          ? Math.round(content.flowHeight * content.flowReflection) + Style.space(16)
-          : Style.space(16)
+        // Above the covers in cover flow (their reflections are below), else below.
+        y: root.style === "coverflow"
+          ? flow.y - height - Style.space(24)
+          : carousel.y + carousel.height + Style.space(16)
         anchors.horizontalCenter: carousel.horizontalCenter
         width: Math.max(root.style === "coverflow" ? content.flowChosenWidth : content.chosenWidth, 480)
         text: content.chosenItem ? content.chosenItem.title : ""
