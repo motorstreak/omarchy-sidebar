@@ -95,7 +95,7 @@ local defaults = {
   -- How much to dim the rest of the screen while a sidebar shows, 0 to 1 (0 or
   -- false: none, not even Omarchy's light dim behind special workspaces; true:
   -- the old strong dim).
-  dim = 0.18,
+  dim = 0.55,
   -- The sidebar's border: a colour name from the theme's colors.toml
   -- ("green", "foreground", "cyan", "background", ...), "theme" (the foreground), a
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", "none", or false for the usual
@@ -216,7 +216,7 @@ do
 
   if type(config.dim) == "number" and (config.dim < 0 or config.dim > 1) then
     problems[#problems + 1] = "dim must be between 0 and 1, or true/false"
-    config.dim = 0.18
+    config.dim = 0.55
   end
   if config.width <= 0 or config.width > 1 then
     problems[#problems + 1] = "width must be between 0 and 1"
