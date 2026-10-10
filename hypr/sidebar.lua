@@ -666,14 +666,19 @@ local sync_keys
 
 -- Drawer -------------------------------------------------------------------------
 
--- A window's own move isn't animated while its `no_anim` is on, but that takes
--- effect a moment later: so a sidebar jumps to its starting point, and slides
--- only after this pause. Hiding waits for the slide out (Omarchy's window
--- animation, about 380 ms, mostly there by this), then for the fade out before
--- the hidden window goes back to its place.
+-- A window's own move isn't animated while its `no_anim` is on, but only from a
+-- moment after it's turned on. And a floating window entirely off screen is put
+-- back on it when its workspace appears. So hidden sidebars keep `no_anim` on;
+-- once one shows, its windows jump off their edge and, after a pause, slide in.
+-- Hiding waits for the slide out (Omarchy's window animation, about 380 ms,
+-- mostly there by this), then for the fade out before the hidden windows go
+-- back to their places.
 local DRAWER_PAUSE = 30
 local DRAWER_OUT = 200
 local DRAWER_FADE = 400
+
+local anim_off = {} -- address -> true: `no_anim` on
+local sliding = {} -- address -> true from showing until its slide in starts
 
 -- The monitor's left edge and width in layout pixels.
 local function span(m)
@@ -731,7 +736,13 @@ local function place_of(window)
 end
 
 local function set_anim(window, on)
-  dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_anim", value = on and "unset" or "1" })
+  if on then
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_anim", value = "unset" })
+    anim_off[window.address] = nil
+  else
+    dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_anim", value = "1" })
+    anim_off[window.address] = true
+  end
 end
 
 local function slide(window, x, y)
@@ -742,34 +753,41 @@ local function after(ms, context, fn)
   hl.timer(guard(context, fn), { timeout = ms, type = "oneshot" })
 end
 
--- Before showing: the sidebar's windows jump off screen. Returns their
--- addresses, or nil when none slides (shown on another monitor than it was
--- docked on: it gets docked there instead).
+-- Before showing: the sidebar windows that will slide in (ready, as they've
+-- been hidden a while, and not shown on another monitor than they were docked
+-- on: those get docked there instead). Returns their addresses, or nil.
 function drawer_prepare(name)
   away[name] = nil
   local monitor = hl.get_active_monitor()
   local list = {}
   for _, w in ipairs(drawer_windows(name)) do
-    if monitor and (docked_on[w.address] == nil or docked_on[w.address] == monitor.id) then
-      local h = place_of(w)
-      set_anim(w, false)
-      slide(w, off_x(w, h.x), h.y)
+    if monitor and anim_off[w.address]
+        and (docked_on[w.address] == nil or docked_on[w.address] == monitor.id) then
+      place_of(w)
+      sliding[w.address] = true
       list[#list + 1] = w.address
     end
   end
   return #list > 0 and list or nil
 end
 
--- Once shown: they slide to their places.
+-- Just shown: they jump off their edge, then slide to their places.
 function drawer_in(addresses)
+  for _, address in ipairs(addresses) do
+    local w, h = current(address), home[address]
+    if w and h then
+      slide(w, off_x(w, h.x), h.y)
+    end
+  end
   after(DRAWER_PAUSE, "sliding the sidebar in", function()
     for _, address in ipairs(addresses) do
       local w, h = current(address), home[address]
+      sliding[address] = nil
       if w and h then
         set_anim(w, true)
         slide(w, h.x, h.y)
-        home[address] = nil
       end
+      home[address] = nil
     end
   end)
 end
@@ -823,26 +841,32 @@ function drawer_back(name)
   end
 end
 
--- Hidden: the windows jump back to their places.
+-- Hidden: the windows go back to their places, ready to jump next time.
 function drawer_restore(name)
-  local moved = {}
   for _, w in ipairs(drawer_windows(name)) do
+    set_anim(w, false)
     local h = home[w.address]
     if h then
-      set_anim(w, false)
       slide(w, h.x, h.y)
-      moved[#moved + 1] = w.address
+      home[w.address] = nil
     end
   end
-  after(DRAWER_PAUSE, "putting the sidebar back", function()
-    for _, address in ipairs(moved) do
-      local w = current(address)
-      if w then
+end
+
+-- After any show or hide: shown sidebar windows animate as usual, hidden ones
+-- are ready to jump (also those hidden some other way, like one sidebar taking
+-- another's place). Without `drawer`, `no_anim` is handed back to the rules.
+local function drawer_sync()
+  for _, w in ipairs(sidebar_windows()) do
+    if members[w.address] and not sliding[w.address] and not away[w.workspace.name] then
+      local hidden = not showing(w)
+      if config.drawer and w.floating and hidden and not anim_off[w.address] then
+        set_anim(w, false)
+      elseif (not hidden or not config.drawer) and anim_off[w.address] then
         set_anim(w, true)
       end
-      home[address] = nil
     end
-  end)
+  end
 end
 
 -- Entering and leaving the sidebar --------------------------------------------
@@ -1318,6 +1342,12 @@ do
     enter(w)
   end  -- For the next sidebar to show (a sidebar already showing keeps its dim).
   dim_behind(shown ~= nil)
+  -- `no_anim` as the drawer wants it (an earlier load may have left it on).
+  for _, w in ipairs(sidebar_windows()) do
+    if members[w.address] then
+      set_anim(w, not (config.drawer and w.floating and not showing(w)))
+    end
+  end
   -- Forget windows that left or closed while this wasn't loaded.
   local pruned = false
   for address in pairs(was_floating) do
@@ -1382,6 +1412,7 @@ hl.on("workspace.special_active", guard("showing the sidebar", function()
     end
   end
   dim_behind(shown ~= nil)
+  drawer_sync()
   sync_keys()
 end))
 
