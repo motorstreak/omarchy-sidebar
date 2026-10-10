@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -379,38 +380,39 @@ Scope {
               border.width: tile.chosen ? 3 : 1
             }
 
-            // The bottom of the card, upside down beneath it, fading out.
+            // The bottom of the card, upside down beneath it, fading out. The
+            // whole of it is flipped, as the mask copies its source unflipped:
+            // so the end nearest the card is the bottom of `fade`.
             Item {
               id: reflection
               y: face.height + 6
               width: face.width
               height: Math.round(face.height * content.flowReflection)
-              opacity: 0.22
-              layer.enabled: true
-              layer.effect: MultiEffect {
-                maskEnabled: true
-                maskSource: fade
-                maskThresholdMin: 0.0
-                maskSpreadAtMin: 1.0
-              }
+              opacity: 0.3
+              transform: Scale { origin.y: reflection.height / 2; yScale: -1 }
 
               ShaderEffectSource {
+                id: mirror
                 anchors.fill: parent
                 sourceItem: cover
                 sourceRect: Qt.rect(0, face.height - reflection.height, face.width, reflection.height)
-                transform: Scale { origin.y: reflection.height / 2; yScale: -1 }
+                visible: false
               }
-            }
 
-            Rectangle {
-              id: fade
-              width: reflection.width
-              height: reflection.height
-              visible: false
-              layer.enabled: true
-              gradient: Gradient {
-                GradientStop { position: 0.0; color: "white" }
-                GradientStop { position: 0.75; color: "transparent" }
+              Rectangle {
+                id: fade
+                anchors.fill: parent
+                visible: false
+                gradient: Gradient {
+                  GradientStop { position: 0.0; color: "transparent" }
+                  GradientStop { position: 1.0; color: "white" }
+                }
+              }
+
+              OpacityMask {
+                anchors.fill: parent
+                source: mirror
+                maskSource: fade
               }
             }
           }
