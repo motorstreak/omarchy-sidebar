@@ -45,6 +45,7 @@ Inside a sidebar that has focus:
 | Key | Action |
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
+| `Super + Tab` | The next sidebar, like `Super + B` (with previews while `Super` is held); with one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent and other windows |
 | `Super + Alt + Left/Right` | Dock it to that screen edge, keeping its size (remembered like a move) |
 | `Super + Minus / Equal` | Wider / narrower, keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
@@ -71,7 +72,7 @@ plugin is installed.
 - `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
   replaces whatever was bound to that key before.
 - While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
-  system menu), and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
+  system menu), `Super + Tab` (next workspace), and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
   swap (`Super + Shift + arrows`) and move-into-group (`Super + Alt + Left/Right`) keys. Everywhere else those are Omarchy's own
   bindings: they start out untouched, and after a sidebar has had focus they
   are re-bound exactly as Omarchy defines them. So if you've customised the
@@ -105,6 +106,7 @@ return {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true,       -- Super + Escape hides it (false: it opens the system menu)
+    cycle = true,        -- Super + Tab shows the next sidebar (false: the next workspace)
   },
   agent = {
     enabled = true,      -- false leaves out the agent sidebar

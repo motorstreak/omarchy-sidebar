@@ -122,6 +122,7 @@ local defaults = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true, -- SUPER + ESCAPE hides it (instead of opening the system menu)
+    cycle = true, -- SUPER + TAB shows the next sidebar (instead of the next workspace)
   },
   agent = {
     enabled = true,
@@ -163,6 +164,9 @@ local group_keys = {
   { "SUPER + ALT + LEFT", "Move window to group on left", "l" },
   { "SUPER + ALT + RIGHT", "Move window to group on right", "r" },
 }
+-- Omarchy's key for the next workspace; in the sidebar (with `cycle`) it shows
+-- the next sidebar, like SUPER + B.
+local CYCLE_KEY = { "SUPER + TAB", "Next workspace", "e+1" }
 
 -- Hides the focused sidebar. Omarchy binds it to the system menu
 -- (default/hypr/bindings/utilities.lua); that comes back whenever the sidebar
@@ -1188,7 +1192,16 @@ local function dock_to(direction)
   end
 end
 
+-- Defined with the switcher further down.
+local cycle
+
 local function bind_sidebar_keys()
+  if config.sidebar.cycle then
+    hl.unbind(CYCLE_KEY[1])
+    o.bind(CYCLE_KEY[1], "Next sidebar", guard("showing the next sidebar", function()
+      cycle()
+    end))
+  end
   for _, r in ipairs(resize_keys) do
     local dx, dy = r[3], r[4]
     hl.unbind(r[1])
@@ -1213,6 +1226,10 @@ local function bind_sidebar_keys()
 end
 
 local function bind_omarchy_keys()
+  if config.sidebar.cycle then
+    hl.unbind(CYCLE_KEY[1])
+    o.bind(CYCLE_KEY[1], CYCLE_KEY[2], hl.dsp.focus({ workspace = CYCLE_KEY[3] }))
+  end
   for _, r in ipairs(resize_keys) do
     hl.unbind(r[1])
     o.bind(r[1], r[2], hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
@@ -1720,6 +1737,15 @@ local function toggle()
   else
     show(list[index])
   end
+end
+
+-- SUPER + TAB in a sidebar: the next one, as with SUPER + B (with the switcher
+-- while SUPER is held), but a lone sidebar stays rather than hiding.
+function cycle()
+  if switcher == nil and #sidebar_list() < 2 then
+    return
+  end
+  toggle()
 end
 
 -- Makes the window a sidebar and shows it. A window that isn't one yet moves to
