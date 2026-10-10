@@ -186,6 +186,8 @@ valid_uuid() {
 # Sessions this sidebar started, by id: the session picker lists these whatever
 # their names (older ones are recognised by their timestamp names).
 sessions_file=$state_dir/sessions
+# The session menu's notes on each transcript (pick_session).
+menu_cache=$state_dir/menu-cache
 
 # A new session, named $1 (default: the date and time).
 new_session() {
@@ -260,7 +262,7 @@ transcript() {
 # Lists the newest sidebar sessions as a searchable menu and
 # sets picked_id/picked_name. Returns 1 if nothing was picked.
 pick_session() {
-  local current f id title titles prompt key choice count=0
+  local current f id title titles first messages prompt stamp cache cached key choice count=0
   local -A ids=() ours=()
   local options=()
   current=$(cat "$state_dir/session-id" 2>/dev/null)
@@ -270,25 +272,41 @@ pick_session() {
     done <"$sessions_file"
   fi
 
+  mkdir -p "$menu_cache"
   while IFS= read -r f; do
-    # The last title wins (a session can be renamed). One grep pass over the
-    # file: reversing whole transcripts to find it was slow with large ones.
-    titles=$(grep -F '"type":"custom-title"' "$f" | jq -r '.customTitle // empty' 2>/dev/null)
-    title=$(tail -n1 <<<"$titles")
-    id=$(basename "$f" .jsonl)
+    id=${f##*/}
+    id=${id%.jsonl}
+    # What the menu needs from a transcript (its first and last title, whether
+    # it has a message, its typed prompts) is kept until the file changes:
+    # reading them out of large transcripts is what made the menu slow.
+    stamp=$(stat -c '%Y %s' "$f")
+    cache=$menu_cache/$id
+    cached=""
+    [[ -f $cache ]] && read -r cached <"$cache"
+    if [[ $cached != "$stamp" ]]; then
+      # The last title wins (a session can be renamed). One grep pass over the
+      # file: reversing whole transcripts to find it was slow with large ones.
+      titles=$(grep -F '"type":"custom-title"' "$f" | jq -r '.customTitle // empty' 2>/dev/null)
+      messages=0
+      grep -q '"type":"user"' "$f" && messages=1
+      # The session's typed prompts, newest first: the menu shows the start of
+      # this line and searches all of it. Only lines whose content is text
+      # (typed, not tool results, which can be huge) go to jq; lines that don't
+      # parse (one being written right now) are skipped.
+      prompt=$(grep -F '"message":{"role":"user","content":"' "$f" |
+        jq -nrR '[inputs | fromjson? | select(.type == "user" and .isMeta != true and (.message.content | type) == "string")
+                  | .message.content | select(startswith("<") | not) | gsub("\\s+"; " ")]
+                 | reverse | join(" · ") | .[0:500]' 2>/dev/null | tr -d '\n')
+      printf '%s\n%s\n%s\n%s\n%s\n' "$stamp" "$(head -n1 <<<"$titles")" "$(tail -n1 <<<"$titles")" \
+        "$messages" "$prompt" >"$cache"
+    fi
+    { read -r _; IFS= read -r first; IFS= read -r title; read -r messages; IFS= read -r prompt; } <"$cache"
     # Started here: listed in sessions_file, or (older ones) first named by
     # timestamp; the first name counts, so a later /rename keeps it listed.
-    [[ -n ${ours[$id]:-} || $(head -n1 <<<"$titles") =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
+    [[ -n ${ours[$id]:-} || $first =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] || continue
     [[ -n $title ]] || title=${id:0:8}
     # Sessions without a message can't be resumed; leave them out.
-    grep -q '"type":"user"' "$f" || continue
-    # The session's typed prompts, newest first: the menu shows the start of
-    # this line and searches all of it. Lines that don't parse (one being
-    # written right now) are skipped rather than failing the whole file.
-    prompt=$(grep '"type":"user"' "$f" |
-      jq -nrR '[inputs | fromjson? | select(.type == "user" and .isMeta != true and (.message.content | type) == "string")
-                | .message.content | select(startswith("<") | not) | gsub("\\s+"; " ")]
-               | reverse | join(" · ") | .[0:500]' 2>/dev/null)
+    ((messages)) || continue
     # A row needs text under its title to be pickable.
     [[ -n $prompt ]] || prompt="(no typed prompts)"
     [[ $id == "$current" ]] && prompt="(current) $prompt"
