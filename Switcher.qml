@@ -121,10 +121,17 @@ Scope {
       readonly property int skewOffset: 28
       readonly property real step: sliceWidth + sliceSpacing
 
-      // The highlighted card keeps its window's shape at the picker's height.
+      // The highlighted card is a little wider than its window's shape at the
+      // picker's height; the preview fills it, cropped top and bottom.
+      readonly property real widen: 1.4
       function cardWidth(it) {
-        var w = expandedHeight * (it.width / Math.max(1, it.height))
+        var w = expandedHeight * widen * (it.width / Math.max(1, it.height))
         return Math.max(260, Math.min(768, w))
+      }
+
+      // The window's preview at the card's width, at least the card's height.
+      function previewHeight(it) {
+        return Math.max(expandedHeight, cardWidth(it) * (it.height / Math.max(1, it.width)))
       }
 
       readonly property var chosenItem: root.items[root.index] || null
@@ -148,7 +155,7 @@ Scope {
 
             readonly property int relative: index - root.index
             readonly property bool chosen: relative === 0
-            // The window at the highlighted card's size; a slice shows its middle.
+            // The window at the highlighted card's width; a slice shows its middle.
             readonly property real fullWidth: content.cardWidth(modelData)
 
             x: chosen ? 0 : (relative < 0
@@ -205,7 +212,7 @@ Scope {
               ScreencopyView {
                 anchors.centerIn: parent
                 width: card.fullWidth
-                height: content.expandedHeight
+                height: content.previewHeight(card.modelData)
                 captureSource: root.capture(card.modelData.address)
                 live: true
               }
