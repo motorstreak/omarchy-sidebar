@@ -10,9 +10,9 @@
 --
 --   SUPER + ALT + B  the focused window becomes a sidebar (or a sidebar
 --                    becomes a normal window again)
---   SUPER + B        show the sidebar last shown; while one shows, the next
---                    (in the order they were added, wrapping round), or hide it
---                    if it's the only one
+--   SUPER + B        show the sidebar last shown, or hide the one showing
+--   SUPER + TAB      (a sidebar focused) the next sidebar, in the order they
+--                    were added, wrapping round; with previews while SUPER is held
 --   SUPER + A        the agent sidebar: your Omarchy default coding agent
 --                    (`omarchy default agent`) becomes a sidebar and shows,
 --                    launched if needed; with Claude Code it also keeps saved,
@@ -115,8 +115,8 @@ local defaults = {
   -- short way in, so they don't show on that monitor. Hyprland's own show/hide
   -- animation becomes a fade (scratchpad too), as with `fade`.
   drawer = true,
-  -- With two or more sidebars, SUPER + B shows live previews of them all in the
-  -- middle of the screen while SUPER is held; false cycles them directly.
+  -- With two or more sidebars, SUPER + TAB shows live previews of them all in
+  -- the middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
   sidebar = {
     toggle = "SUPER + B",
@@ -165,7 +165,7 @@ local group_keys = {
   { "SUPER + ALT + RIGHT", "Move window to group on right", "r" },
 }
 -- Omarchy's key for the next workspace; in the sidebar (with `cycle`) it shows
--- the next sidebar, like SUPER + B.
+-- the next sidebar.
 local CYCLE_KEY = { "SUPER + TAB", "Next workspace", "e+1" }
 
 -- Hides the focused sidebar. Omarchy binds it to the system menu
@@ -326,7 +326,7 @@ end
 -- The sidebar windows by address, so a window leaving a sidebar can be told
 -- apart from an ordinary window moving between workspaces, and whether each was
 -- floating before, to put it back that way. Each member's value is a sequence
--- number: SUPER + B cycles through them in the order they were added.
+-- number: SUPER + TAB cycles through them in the order they were added.
 local members = {}
 -- Also kept in a file: a Hyprland reload runs this file afresh, and a window
 -- already in a sidebar must still go back floating when it leaves.
@@ -1587,9 +1587,9 @@ end
 
 -- Switcher ----------------------------------------------------------------------
 
--- SUPER + B with two or more sidebars opens the switcher: Service.qml draws a
+-- SUPER + TAB with two or more sidebars opens the switcher: Service.qml draws a
 -- live preview of each sidebar in the middle of the screen, one highlighted.
--- Each further B (SUPER still held) highlights the next; letting go of SUPER
+-- Each further TAB (SUPER still held) highlights the next; letting go of SUPER
 -- shows the highlighted one, and SUPER + ESCAPE closes it without a change.
 -- Every message carries the whole state and a sequence number, as each one is a
 -- separate process and they can arrive out of order. The numbers start again
@@ -1597,7 +1597,7 @@ end
 -- also carry an id for this load: the shell takes any message from a new one.
 --
 -- Letting go of SUPER is watched for by polling: a release binding on SUPER
--- only fires if SUPER was the last key pressed, and here B came after it.
+-- only fires if SUPER was the last key pressed, and here TAB came after it.
 local SUPER_KEYS = { "Super_L", "Super_R" }
 local POLL_MS = 20
 local switcher = nil -- { windows, index, seq } while open
@@ -1693,13 +1693,9 @@ local function switcher_open(list, index)
   switcher_update()
 end
 
--- SUPER + B: hidden, the sidebar shown last comes back. Shown, the next one
--- comes in its place (wrapping round), or it hides if it's the only one. With
--- the switcher, that's the one highlighted first.
+-- SUPER + B: hidden, the sidebar shown last comes back; shown, it hides.
 local function toggle()
   if switcher then
-    switcher.index = switcher.index % #switcher.windows + 1
-    switcher_update()
     return
   end
   local list = sidebar_list()
@@ -1712,40 +1708,40 @@ local function toggle()
     return
   end
   local shown = shown_sidebar()
+  if shown then
+    hide_shown()
+  else
+    show(last_sidebar(list))
+  end
+end
+
+-- SUPER + TAB in a sidebar: the next one in the order they were added
+-- (wrapping round), or with the switcher, that's the one highlighted first. A
+-- lone sidebar stays.
+function cycle()
+  if switcher then
+    switcher.index = switcher.index % #switcher.windows + 1
+    switcher_update()
+    return
+  end
+  local list = sidebar_list()
+  if #list < 2 then
+    return
+  end
+  local shown = shown_sidebar()
   local at = 0
   for i, w in ipairs(list) do
     if w.workspace.name == shown then
       at = i
     end
   end
-  if #list == 1 and at == 1 then
-    toggle_workspace(shown)
-    return
-  end
   local index = at % #list + 1
-  if shown == nil then
-    local last = last_sidebar(list)
-    for i, w in ipairs(list) do
-      if w == last then
-        index = i
-      end
-    end
-  end
   -- The switcher closes when SUPER is let go, so it needs SUPER held now.
-  if config.switcher and #list > 1 and super_down() then
+  if config.switcher and super_down() then
     switcher_open(list, index)
   else
     show(list[index])
   end
-end
-
--- SUPER + TAB in a sidebar: the next one, as with SUPER + B (with the switcher
--- while SUPER is held), but a lone sidebar stays rather than hiding.
-function cycle()
-  if switcher == nil and #sidebar_list() < 2 then
-    return
-  end
-  toggle()
 end
 
 -- Makes the window a sidebar and shows it. A window that isn't one yet moves to

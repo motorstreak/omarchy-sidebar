@@ -7,7 +7,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 
-// The sidebar switcher (SUPER + B with two or more sidebars): live previews of
+// The sidebar switcher (SUPER + TAB with two or more sidebars): live previews of
 // every sidebar in the middle of the focused screen over a dimmed backdrop,
 // styled like Omarchy's theme and background picker. hypr/sidebar.lua owns
 // the keys and the choice; it sends the whole state with each change. It takes

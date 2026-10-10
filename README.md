@@ -5,8 +5,9 @@ floating over your workspace, and shown or hidden
 with one key. One key also makes your Omarchy default coding agent a sidebar,
 with saved, searchable sessions when that agent is Claude Code.
 
-You can have several sidebars, one showing at a time: `Super + B` cycles
-through them, each replacing the one before. Sidebars keep a wider gap from the
+You can have several sidebars, one showing at a time: `Super + B` shows or
+hides the one you used last, and `Super + Tab` (in a sidebar) cycles through
+them, each replacing the one before. Sidebars keep a wider gap from the
 screen edges than tiled windows, have well-rounded corners, and a border in your
 theme's green so they stand out
 (`margin`, `rounding`, `border`, `border_opacity` and `border_size` in the
@@ -34,7 +35,7 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 | Key | Action |
 |---|---|
 | `Super + Alt + B` | Make the focused window a sidebar, or a sidebar a normal window again |
-| `Super + B` | With two or more sidebars: live previews of them all in the middle of the screen. Keep `Super` held and press `B` again to move along; let go of `Super` to show the highlighted one (`Super + Escape` cancels). The first one highlighted is the sidebar you used last, or the next one if a sidebar is showing, so a quick tap works as before. With just one, show/hide it |
+| `Super + B` | Show the sidebar you used last, or hide the one showing |
 | `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
 | `Super + Shift + A` | New agent session (Claude: asks for its name, empty keeps the date and time; or starts the session a waiting question was handed off to) |
 | `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts); a running one comes back as it was |
@@ -45,7 +46,7 @@ Inside a sidebar that has focus:
 | Key | Action |
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
-| `Super + Tab` | The next sidebar, like `Super + B` (with previews while `Super` is held); with one sidebar it stays |
+| `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent and other windows |
 | `Super + Alt + Left/Right` | Dock it to that screen edge, keeping its size (remembered like a move) |
 | `Super + Minus / Equal` | Wider / narrower, keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
@@ -101,7 +102,7 @@ return {
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
-  switcher = true,       -- false: Super + B cycles sidebars directly, without previews
+  switcher = true,       -- false: Super + Tab cycles sidebars directly, without previews
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -145,7 +146,7 @@ chooser (which starts the chosen agent in a normal window; press `Super + A`
 again for the sidebar). Agents start through Omarchy's own launcher, exactly as
 `Super + Shift + Ctrl + A` starts them; `Super + Shift + A` closes the running
 one and starts it fresh, without asking. The agent is one of your sidebars:
-`Super + B` cycles through it with the others.
+`Super + Tab` cycles through it with the others.
 
 Claude Code is the exception, because Omarchy's launcher can't pass it session
 options: Claude is run directly, pinned to one session, so closing the sidebar
@@ -153,7 +154,7 @@ and pressing `Super + A` resumes the same conversation. `Super + Shift + A` asks
 for the new session's name; leave it empty (or press Escape) to name it with
 the date and time. The session before keeps running, hidden (closed only if
 it has no message yet), and `Super + Alt + A` brings it back exactly as it was;
-each running session is also one of your sidebars for `Super + B`. Once they
+each running session is also one of your sidebars for `Super + Tab`. Once they
 have a message, sessions show up in the `Super + Alt + A` menu (the newest 50;
 type to search their prompts) and in Claude's `/resume` picker; one that isn't
 running is resumed. The menu lists the sessions the sidebar started, so
