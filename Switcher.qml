@@ -312,107 +312,119 @@ Scope {
             Behavior on scale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
             Behavior on angle { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
 
-            transform: Rotation {
-              origin.x: tile.width / 2
-              origin.y: tile.height / 2
-              axis { x: 0; y: 1; z: 0 }
-              angle: tile.angle
-            }
-
-            Rectangle {
-              id: corners
-              width: tile.width
-              height: tile.height
-              radius: content.flowRadius
-              visible: false
-              layer.enabled: true
-            }
-
-            // The card as drawn, rounded corners and all, for the reflection to
-            // copy (copying `face` itself would skip its own corner mask).
+            // Drawn into a multisampled layer, turned inside it, so the turned
+            // card's edges and corners come out smooth. The layer reaches past
+            // the card, as perspective makes its near edge taller, and covers
+            // the reflection below.
+            readonly property int pad: 48
             Item {
-              id: cover
-              width: tile.width
-              height: tile.height
+              x: -tile.pad
+              y: -tile.pad
+              width: tile.width + 2 * tile.pad
+              height: tile.height * (1 + content.flowReflection) + 6 + 2 * tile.pad
+              layer.enabled: true
+              layer.smooth: true
+              layer.samples: 4
 
               Item {
-                id: face
+                x: tile.pad
+                y: tile.pad
                 width: tile.width
                 height: tile.height
-                clip: true
-                layer.enabled: true
-                layer.smooth: true
-                layer.effect: MultiEffect {
-                  maskEnabled: true
-                  maskSource: corners
-                  maskThresholdMin: 0.3
-                  maskSpreadAtMin: 0.3
+                transform: Rotation {
+                  origin.x: tile.width / 2
+                  origin.y: tile.height / 2
+                  axis { x: 0; y: 1; z: 0 }
+                  angle: tile.angle
                 }
 
                 Rectangle {
-                  anchors.fill: parent
-                  color: Color.background
+                  id: corners
+                  width: tile.width
+                  height: tile.height
+                  radius: content.flowRadius
+                  antialiasing: true
+                  visible: false
+                  layer.enabled: true
+                  layer.smooth: true
                 }
 
-                // The window filling the card, cropped to it.
-                ScreencopyView {
-                  anchors.centerIn: parent
-                  width: Math.max(tile.width, tile.height * tile.aspect)
-                  height: width / tile.aspect
-                  captureSource: root.capture(tile.modelData.address)
-                  live: true
+                // The card as drawn, rounded corners and all, for the reflection to
+                // copy (copying `face` itself would skip its own corner mask).
+                Item {
+                  id: cover
+                  width: tile.width
+                  height: tile.height
+
+                  Item {
+                    id: face
+                    width: tile.width
+                    height: tile.height
+                    clip: true
+                    layer.enabled: true
+                    layer.smooth: true
+                    layer.effect: OpacityMask {
+                      maskSource: corners
+                    }
+
+                    Rectangle {
+                      anchors.fill: parent
+                      color: Color.background
+                    }
+
+                    // The window filling the card, cropped to it.
+                    ScreencopyView {
+                      anchors.centerIn: parent
+                      width: Math.max(tile.width, tile.height * tile.aspect)
+                      height: width / tile.aspect
+                      captureSource: root.capture(tile.modelData.address)
+                      live: true
+                    }
+
+                    Rectangle {
+                      anchors.fill: parent
+                      color: Util.alpha(Color.background, tile.chosen ? 0 : 0.42)
+                      Behavior on color { ColorAnimation { duration: 280 } }
+                    }
+
+                  }
                 }
 
-                Rectangle {
-                  anchors.fill: parent
-                  color: Util.alpha(Color.background, tile.chosen ? 0 : 0.42)
-                  Behavior on color { ColorAnimation { duration: 280 } }
+                // The bottom of the card, upside down beneath it, fading out. The
+                // whole of it is flipped, as the mask copies its source unflipped:
+                // so the end nearest the card is the bottom of `fade`.
+                Item {
+                  id: reflection
+                  y: face.height + 6
+                  width: face.width
+                  height: Math.round(face.height * content.flowReflection)
+                  opacity: 0.3
+                  transform: Scale { origin.y: reflection.height / 2; yScale: -1 }
+
+                  ShaderEffectSource {
+                    id: mirror
+                    anchors.fill: parent
+                    sourceItem: cover
+                    sourceRect: Qt.rect(0, face.height - reflection.height, face.width, reflection.height)
+                    visible: false
+                  }
+
+                  Rectangle {
+                    id: fade
+                    anchors.fill: parent
+                    visible: false
+                    gradient: Gradient {
+                      GradientStop { position: 0.0; color: "transparent" }
+                      GradientStop { position: 1.0; color: "white" }
+                    }
+                  }
+
+                  OpacityMask {
+                    anchors.fill: parent
+                    source: mirror
+                    maskSource: fade
+                  }
                 }
-
-              }
-            }
-
-            Rectangle {
-              anchors.fill: cover
-              radius: content.flowRadius
-              color: "transparent"
-              border.color: tile.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
-              border.width: tile.chosen ? 3 : 1
-            }
-
-            // The bottom of the card, upside down beneath it, fading out. The
-            // whole of it is flipped, as the mask copies its source unflipped:
-            // so the end nearest the card is the bottom of `fade`.
-            Item {
-              id: reflection
-              y: face.height + 6
-              width: face.width
-              height: Math.round(face.height * content.flowReflection)
-              opacity: 0.3
-              transform: Scale { origin.y: reflection.height / 2; yScale: -1 }
-
-              ShaderEffectSource {
-                id: mirror
-                anchors.fill: parent
-                sourceItem: cover
-                sourceRect: Qt.rect(0, face.height - reflection.height, face.width, reflection.height)
-                visible: false
-              }
-
-              Rectangle {
-                id: fade
-                anchors.fill: parent
-                visible: false
-                gradient: Gradient {
-                  GradientStop { position: 0.0; color: "transparent" }
-                  GradientStop { position: 1.0; color: "white" }
-                }
-              }
-
-              OpacityMask {
-                anchors.fill: parent
-                source: mirror
-                maskSource: fade
               }
             }
           }
