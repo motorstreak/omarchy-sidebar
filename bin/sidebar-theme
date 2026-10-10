@@ -8,10 +8,18 @@
 # a terminal, or a terminal running all its windows in one process, keeps its
 # own colours.
 #
-#   sidebar-theme pick ADDRESS APP     ask for APP's theme, then restyle sidebars
-#   sidebar-theme apply ADDRESS APP    the window's terminal in APP's theme
-#                                      (the current Omarchy theme if none)
-#   sidebar-theme restore ADDRESS APP  the window's terminal in the current theme
+# The theme picker (ThemePicker.qml) lists the themes, previews each one on the
+# focused sidebar as it's highlighted, and sets or cancels:
+#
+#   sidebar-theme list                       "<folder>\t<name>" for each theme
+#   sidebar-theme preview ADDRESS APP [THEME] the window in THEME (none: the current
+#                                            Omarchy theme), not saved
+#   sidebar-theme set ADDRESS APP [THEME]    THEME for APP's sidebars (none: follow
+#                                            Omarchy's), then restyle them all
+#   sidebar-theme cancel ADDRESS APP         every sidebar back to its saved theme
+#   sidebar-theme apply ADDRESS APP          the window's terminal in APP's theme
+#                                            (the current Omarchy theme if none)
+#   sidebar-theme restore ADDRESS APP        the window's terminal in the current theme
 
 set -uo pipefail
 
@@ -19,15 +27,18 @@ state=${XDG_STATE_HOME:-$HOME/.local/state}
 themes=$state/omarchy-sidebar/themes
 current=$state/omarchy/current/theme/colors.toml
 omarchy_path=${OMARCHY_PATH:-/usr/share/omarchy}
-FOLLOW="Follow system theme"
+usage() {
+  echo "Usage: sidebar-theme list | preview|set ADDRESS APP [THEME] | cancel|apply|restore ADDRESS APP" >&2
+  exit 1
+}
 
 action=${1:-}
 address=${2:-}
 app=${3:-}
-[[ -n $action && -n $address && $app =~ ^[A-Za-z0-9._-]+$ ]] || {
-  echo "Usage: sidebar-theme pick|apply|restore ADDRESS APP" >&2
-  exit 1
-}
+theme=${4:-}
+if [[ $action != list ]]; then
+  [[ $address =~ ^(0x)?[0-9a-fA-F]+$ && $app =~ ^[A-Za-z0-9._-]+$ && $theme =~ ^[A-Za-z0-9._-]*$ ]] || usage
+fi
 
 # A theme's colors.toml by its folder name, yours before Omarchy's.
 colors_of() {
@@ -52,11 +63,12 @@ terminal_of() {
 }
 
 # The window's terminal in a colors.toml's colours. A window just opened may
-# not have started its program yet: waited for, briefly.
+# not have started its program yet: waited for, briefly, unless `now`.
 paint() {
-  local colors=$1 tty="" i osc
+  local colors=$1 tries=30 tty="" i osc
   [[ -f $colors ]] || return
-  for i in {1..30}; do
+  [[ ${2:-} == now ]] && tries=1
+  for ((i = 0; i < tries; i++)); do
     tty=$(terminal_of "$address")
     [[ -n $tty ]] && break
     sleep 0.1
@@ -75,36 +87,33 @@ case $action in
   restore)
     paint "$current"
     ;;
-  pick)
-    chosen=$(head -n1 "$themes/$app" 2>/dev/null)
-    declare -A slug_of
-    options=("$FOLLOW")
-    while IFS= read -r slug; do
-      label=$(sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$slug")
-      slug_of[$label]=$slug
-      if [[ $slug == "$chosen" ]]; then
-        options+=($'\t'"$label")
-      else
-        options+=("$label")
-      fi
-    done < <({
+  list)
+    {
       find "$HOME/.config/omarchy/themes/" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -printf '%f\n'
       find "$omarchy_path/themes/" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
-    } 2>/dev/null | sort -u)
-
-    choice=$(omarchy-menu-select "Sidebar theme" "${options[@]}") || exit 0
+    } 2>/dev/null | sort -u | while IFS= read -r slug; do
+      [[ -f $(colors_of "$slug") ]] || continue
+      printf '%s\t%s\n' "$slug" "$(sed -E 's/(^|-)([a-z])/\1\u\2/g; s/[-_]/ /g' <<<"$slug")"
+    done
+    ;;
+  preview)
+    colors=$([[ -n $theme ]] && colors_of "$theme")
+    paint "${colors:-$current}" now
+    hyprctl eval "sidebar.preview_border('$address', '$theme')" >/dev/null
+    ;;
+  set)
     mkdir -p "$themes"
-    if [[ $choice == "$FOLLOW" ]]; then
+    if [[ -z $theme ]]; then
       rm -f "$themes/$app"
-    elif [[ -n ${slug_of[$choice]:-} ]]; then
-      echo "${slug_of[$choice]}" >"$themes/$app"
-    else
-      exit 0
+    elif [[ -n $(colors_of "$theme") ]]; then
+      echo "$theme" >"$themes/$app"
     fi
     hyprctl eval 'sidebar.retheme()' >/dev/null
     ;;
+  cancel)
+    hyprctl eval 'sidebar.retheme()' >/dev/null
+    ;;
   *)
-    echo "Usage: sidebar-theme pick|apply|restore ADDRESS APP" >&2
-    exit 1
+    usage
     ;;
 esac

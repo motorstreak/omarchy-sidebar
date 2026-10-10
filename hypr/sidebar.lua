@@ -1302,14 +1302,20 @@ end
 -- Defined with the switcher further down.
 local cycle
 
--- SUPER + ALT + T in a sidebar: bin/sidebar-theme asks for a theme for the
--- focused sidebar's app and has the sidebars re-styled (sidebar.retheme).
+-- SUPER + ALT + T in a sidebar: the theme picker (ThemePicker.qml) opens beside
+-- it, previewing each theme on it as it's highlighted (bin/sidebar-theme).
 local function pick_theme()
   local window = hl.get_active_window()
   local app = window and is_member(window) and theme_app(window)
-  if app then
-    hl.exec_cmd(quote(dir .. "/bin/sidebar-theme") .. " pick " .. quote(window.address) .. " " .. quote(app))
+  local m = window and window.monitor
+  if not app or not m then
+    return
   end
+  local mx = span(m)
+  local payload = string.format(
+    '{"address":"%s","app":"%s","theme":"%s","monitor":"%s","x":%d,"width":%d}',
+    window.address, app, chosen_theme(window) or "", m.name, window.at.x - mx, window.size.x)
+  hl.exec_cmd("omarchy-shell -q sidebar-theme-picker open " .. quote(payload))
 end
 
 local function bind_sidebar_keys()
@@ -2084,6 +2090,19 @@ sidebar = {
   -- Every sidebar's border and terminal colours as their apps' themes say,
   -- after one was picked (bin/sidebar-theme) or Omarchy's theme changed (the
   -- theme-set hook).
+  -- The theme picker's preview: one sidebar's border in a theme ("" for the
+  -- current one), not saved.
+  preview_border = function(address, name)
+    local w = current(address)
+    if w == nil or not is_member(w) or no_border or config.border == false then
+      return
+    end
+    local colors = name ~= "" and tostring(name):match("^[%w._-]+$") and theme_colors_of(name)
+    local colours = colors and border_from(colors) or sidebar_border
+    if colours then
+      set_border(w, colours[1], colours[2])
+    end
+  end,
   retheme = function()
     for _, w in ipairs(sidebar_windows()) do
       if members[w.address] then
