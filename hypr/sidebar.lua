@@ -110,6 +110,11 @@ local defaults = {
   -- one animation for every special workspace, so this fades the scratchpad
   -- too, and it replaces any specialWorkspace animation in your Hyprland config.
   fade = false,
+  -- Slide sidebars in from the screen edge they're docked against, and back out
+  -- to it when they hide, like a drawer. Next to another monitor they start a
+  -- short way in, so they don't show on that monitor. Hyprland's own show/hide
+  -- animation becomes a fade (scratchpad too), as with `fade`.
+  drawer = true,
   -- With two or more sidebars, SUPER + B shows live previews of them all in the
   -- middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
@@ -296,7 +301,7 @@ local agent_class = config.agent.enabled and config.agent.class or nil
 
 -- Loaded after your Hyprland config (and again on every reload), so this wins.
 -- Omarchy's speed and curve, with its "slidevert" style swapped for a fade.
-if config.fade then
+if config.fade or config.drawer then
   hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint", style = "fade" })
 end
 
@@ -469,17 +474,45 @@ local function dim_behind(sidebar)
   end
 end
 
--- Shows or hides a sidebar workspace on the active monitor.
-local function toggle_workspace(name)
-  -- Showing it (the same name shown already would hide it instead).
-  dim_behind(shown_sidebar() ~= name)
+-- The drawer (`drawer`), defined with the geometry further down: the sidebars
+-- sliding out (sidebar workspace -> token of that slide), and where each
+-- sidebar window sits while it's off its place (address -> { x, y }).
+local away, home = {}, {}
+local drawer_prepare, drawer_in, drawer_out, drawer_back, drawer_restore
+
+local function toggle_special(name)
   hl.dispatch(hl.dsp.workspace.toggle_special(name:sub(#"special:" + 1)))
 end
 
--- Hides the sidebar on the active monitor, if one shows.
+-- Shows or hides a sidebar workspace on the active monitor; `instant` skips the
+-- drawer's slide.
+local function toggle_workspace(name, instant)
+  local slide = config.drawer and not instant
+  if shown_sidebar() == name then
+    if slide and away[name] then
+      drawer_back(name) -- hidden halfway: it comes back
+    elseif slide then
+      drawer_out(name)
+    else
+      away[name] = nil
+      dim_behind(false)
+      toggle_special(name)
+      drawer_restore(name)
+    end
+    return
+  end
+  dim_behind(true)
+  local sliding = slide and drawer_prepare(name)
+  toggle_special(name)
+  if sliding then
+    drawer_in(sliding)
+  end
+end
+
+-- Hides the sidebar on the active monitor, if one shows (and isn't hiding).
 local function hide_shown()
   local shown = shown_sidebar()
-  if shown then
+  if shown and not away[shown] then
     toggle_workspace(shown)
   end
 end
@@ -626,11 +659,194 @@ local function dock_default(window)
   place(window, width, a.bottom - top, x, top)
 end
 
+-- Defined further down; entering and leaving re-check the sidebar keys, since a
+-- new window's focus event can arrive before it has entered the sidebar (and
+-- the drawer once a sidebar has hidden).
+local sync_keys
+
+-- Drawer -------------------------------------------------------------------------
+
+-- A window's own move isn't animated while its `no_anim` is on, but that takes
+-- effect a moment later: so a sidebar jumps to its starting point, and slides
+-- only after this pause. Hiding waits for the slide out (Omarchy's window
+-- animation, about 380 ms, mostly there by this), then for the fade out before
+-- the hidden window goes back to its place.
+local DRAWER_PAUSE = 30
+local DRAWER_OUT = 200
+local DRAWER_FADE = 400
+
+-- The monitor's left edge and width in layout pixels.
+local function span(m)
+  local w = m.width / m.scale
+  if (m.transform or 0) % 2 == 1 then
+    w = m.height / m.scale
+  end
+  return m.x, w
+end
+
+-- The floating sidebar windows of a sidebar workspace, on a usable monitor.
+local function drawer_windows(name)
+  local list = {}
+  for _, w in ipairs(hl.get_workspace_windows(name) or {}) do
+    if members[w.address] and w.floating and usable_monitor(w.monitor) then
+      list[#list + 1] = w
+    end
+  end
+  return list
+end
+
+-- Where the window slides from and to for a place at x: off its nearer screen
+-- edge, or a short way in from it when another monitor is beyond that edge.
+local function off_x(window, x)
+  local m = window.monitor
+  local a = area(m)
+  local mx, mw = span(m)
+  local width = window.size.x
+  local left = x - a.left <= a.right - (x + width)
+  for _, o in ipairs(hl.get_monitors()) do
+    if o.id ~= m.id and o.y < m.y + m.height / m.scale and m.y < o.y + o.height / o.scale then
+      local ox, ow = span(o)
+      if (left and math.abs(ox + ow - mx) < 2) or (not left and math.abs(ox - (mx + mw)) < 2) then
+        local step = math.floor(width * 0.3)
+        return left and x - step or x + step
+      end
+    end
+  end
+  return left and (mx - width - 64) or (mx + mw + 64)
+end
+
+-- The window's place: kept while it's away, else where it is, inside the
+-- usable area (a reload mid-slide can leave it off screen).
+local function place_of(window)
+  local h = home[window.address]
+  if h == nil then
+    local a = area(window.monitor)
+    h = {
+      x = math.floor(math.min(math.max(window.at.x, a.left), math.max(a.left, a.right - window.size.x))),
+      y = window.at.y,
+    }
+    home[window.address] = h
+  end
+  return h
+end
+
+local function set_anim(window, on)
+  dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_anim", value = on and "unset" or "1" })
+end
+
+local function slide(window, x, y)
+  dispatch_for(window, hl.dsp.window.move, { x = x, y = y })
+end
+
+local function after(ms, context, fn)
+  hl.timer(guard(context, fn), { timeout = ms, type = "oneshot" })
+end
+
+-- Before showing: the sidebar's windows jump off screen. Returns their
+-- addresses, or nil when none slides (shown on another monitor than it was
+-- docked on: it gets docked there instead).
+function drawer_prepare(name)
+  away[name] = nil
+  local monitor = hl.get_active_monitor()
+  local list = {}
+  for _, w in ipairs(drawer_windows(name)) do
+    if monitor and (docked_on[w.address] == nil or docked_on[w.address] == monitor.id) then
+      local h = place_of(w)
+      set_anim(w, false)
+      slide(w, off_x(w, h.x), h.y)
+      list[#list + 1] = w.address
+    end
+  end
+  return #list > 0 and list or nil
+end
+
+-- Once shown: they slide to their places.
+function drawer_in(addresses)
+  after(DRAWER_PAUSE, "sliding the sidebar in", function()
+    for _, address in ipairs(addresses) do
+      local w, h = current(address), home[address]
+      if w and h then
+        set_anim(w, true)
+        slide(w, h.x, h.y)
+        home[address] = nil
+      end
+    end
+  end)
+end
+
+-- Hiding: the windows slide off their edge, then the sidebar hides (unless
+-- it's been shown again or replaced meanwhile) and they go back to their
+-- places, out of sight.
+function drawer_out(name)
+  local token = {}
+  away[name] = token
+  local monitor = hl.get_active_monitor()
+  for _, w in ipairs(drawer_windows(name)) do
+    local h = place_of(w)
+    slide(w, off_x(w, h.x), h.y)
+  end
+  after(DRAWER_OUT, "hiding the sidebar", function()
+    if away[name] ~= token then
+      return
+    end
+    local m = hl.get_active_monitor()
+    -- The dispatcher acts on the active monitor: with another one active now
+    -- the sidebar can't hide from here, so it slides back instead.
+    if m and monitor and m.id == monitor.id and shown_sidebar(m) == name then
+      dim_behind(false)
+      toggle_special(name)
+      sync_keys()
+      after(DRAWER_FADE, "putting the sidebar back", function()
+        if away[name] == token then
+          away[name] = nil
+          drawer_restore(name)
+        end
+      end)
+    elseif shown_sidebar(monitor) == name then
+      drawer_back(name)
+    else
+      away[name] = nil
+      drawer_restore(name)
+    end
+  end)
+end
+
+-- Hiding was undone: the windows slide back to their places.
+function drawer_back(name)
+  away[name] = nil
+  for _, w in ipairs(drawer_windows(name)) do
+    local h = home[w.address]
+    if h then
+      slide(w, h.x, h.y)
+      home[w.address] = nil
+    end
+  end
+end
+
+-- Hidden: the windows jump back to their places.
+function drawer_restore(name)
+  local moved = {}
+  for _, w in ipairs(drawer_windows(name)) do
+    local h = home[w.address]
+    if h then
+      set_anim(w, false)
+      slide(w, h.x, h.y)
+      moved[#moved + 1] = w.address
+    end
+  end
+  after(DRAWER_PAUSE, "putting the sidebar back", function()
+    for _, address in ipairs(moved) do
+      local w = current(address)
+      if w then
+        set_anim(w, true)
+      end
+      home[address] = nil
+    end
+  end)
+end
+
 -- Entering and leaving the sidebar --------------------------------------------
 
--- Defined further down; entering and leaving re-check the sidebar keys, since a
--- new window's focus event can arrive before it has entered the sidebar.
-local sync_keys
 
 local function set_dim(window, on)
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "dim_around", value = on and "1" or "0" })
@@ -1017,7 +1233,7 @@ local function hide_on_outside_click()
   hl.timer(guard("hiding the sidebar", function()
     local m = hl.get_active_monitor()
     local shown = m and m.id == monitor_id and shown_sidebar(m)
-    if shown then
+    if shown and not away[shown] then
       toggle_workspace(shown)
       sync_keys()
     end
@@ -1181,7 +1397,7 @@ hl.on("window.open", guard("opening a window", function(window)
     local m = hl.get_active_monitor()
     local shown = m and shown_sidebar(m)
     if shown and window.monitor and window.monitor.id == m.id then
-      toggle_workspace(shown)
+      toggle_workspace(shown, true)
       -- Hiding hands focus back to the workspace, and the screensaver quits
       -- when it loses focus: so it gets it back.
       local address = window.address

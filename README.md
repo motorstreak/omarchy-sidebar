@@ -99,6 +99,7 @@ return {
   rounding = 32,         -- sidebars' corner radius (Omarchy's popped-out windows have 8); 0 for square
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
+  drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
   switcher = true,       -- false: Super + B cycles sidebars directly, without previews
   sidebar = {
     toggle = "SUPER + B",
@@ -125,6 +126,14 @@ in the file are shown as a "Sidebar" notification.
 from one sidebar to the next. Hyprland has a single animation for every special
 workspace, so the scratchpad fades too, and it replaces any `specialWorkspace`
 animation in your own Hyprland config while the plugin is enabled.
+
+`drawer = true` (the default) slides a sidebar in from the screen edge it's
+docked against, and back out to it when it hides, so it reads as a drawer
+rather than another window. It uses your window move animation, and turns the
+special workspace animation into a fade like `fade = true` (the scratchpad
+fades too). An edge with another monitor beyond it gets a short slide, so the
+sidebar doesn't show on that monitor on its way in. Set `drawer = false` for
+Omarchy's vertical slide.
 
 ## The agent sidebar
 
