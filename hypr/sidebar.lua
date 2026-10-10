@@ -122,6 +122,10 @@ local defaults = {
   -- or "coverflow" (the others turned in 3D on either side, with a
   -- reflection). SUPER + T while it's open swaps them, and that's remembered.
   switcher_style = "cards",
+  -- Apps with a theme picker of their own, by class: SUPER + ALT + T in their
+  -- sidebar presses this key to open it, instead of the sidebar's picker, and
+  -- the sidebar leaves their colours alone. Add yours; false drops one.
+  own_themes = { ["org.omarchy.cliamp"] = "T" }, -- cliamp: T, "Choose theme"
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -196,6 +200,14 @@ local function apply(into, overrides, path, problems, keys)
     local current = into[k]
     if current == nil then
       problems[#problems + 1] = "unknown option " .. name
+    elseif name == "own_themes" and type(v) == "table" then
+      for app, key in pairs(v) do
+        if type(app) == "string" and (type(key) == "string" or key == false) then
+          current[app] = key or nil
+        else
+          problems[#problems + 1] = "own_themes." .. tostring(app) .. " must be a key name or false"
+        end
+      end
     elseif type(current) == "table" then
       if type(v) == "table" then
         apply(current, v, name .. ".", problems, key_options[k])
@@ -980,6 +992,9 @@ local function theme_app(window)
     return "agent"
   end
   local class = window.class or ""
+  if config.own_themes[class] then
+    return nil -- it themes itself
+  end
   return class ~= "" and not class:find("/", 1, true) and class or nil
 end
 
@@ -1306,6 +1321,16 @@ local cycle
 -- it, previewing each theme on it as it's highlighted (bin/sidebar-theme).
 local function pick_theme()
   local window = hl.get_active_window()
+  local own = window and is_member(window) and config.own_themes[window.class or ""]
+  if own then
+    -- Its own picker: a key press, down then up (send_shortcut can leave a key
+    -- stuck repeating, as Omarchy's clipboard keys note).
+    hl.dispatch(hl.dsp.send_key_state({ mods = "", key = own, state = "down" }))
+    hl.timer(function()
+      hl.dispatch(hl.dsp.send_key_state({ mods = "", key = own, state = "up" }))
+    end, { timeout = 50, type = "oneshot" })
+    return
+  end
   local app = window and is_member(window) and theme_app(window)
   local m = window and window.monitor
   if not app or not m then

@@ -154,9 +154,12 @@ other window goes by its app), until you pick "Follow system theme" again.
 - An app that draws its own colours (a browser, say) only gets the border.
 - Claude Code in the agent sidebar uses its "ANSI colours only" theme (light
   or dark by the sidebar's theme), so all of it, accents included, follows the
-  terminal's colours and changes the moment you pick a theme, like cliamp. Its
-  usual themes, Omarchy's included, use fixed colours. Sessions started before
+  terminal's colours and changes the moment you pick a theme. Its usual
+  themes, Omarchy's included, use fixed colours. Sessions started before
   0.21.1 pick it up when relaunched.
+- An app with a theme picker of its own (`own_themes`; cliamp by default)
+  keeps its own colours: `Super + Alt + T` in its sidebar opens its picker
+  instead (for cliamp, by pressing `T`).
 
 The plugin adds a hook, `~/.config/omarchy/hooks/theme-set.d/omarchy-sidebar-themes`,
 so a sidebar's theme survives Omarchy theme changes.
