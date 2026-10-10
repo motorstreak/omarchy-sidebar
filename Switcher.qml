@@ -18,6 +18,7 @@ Scope {
   property int index: 0
   property var items: []
   property color accent: "white"
+  property string monitor: ""
 
   // Messages come from separate processes and can arrive out of order: only a
   // newer one counts. Each load of sidebar.lua numbers them afresh under a new
@@ -42,6 +43,11 @@ Scope {
   function show(payload) {
     var p = JSON.parse(payload)
     if (!newer(String(p.session), p.seq)) return
+    // The shell's list of Hyprland windows follows its event connection, which
+    // is never remade once Hyprland closes it (quickshell #989): fetched afresh
+    // on opening, so new sidebars still have previews.
+    if (!open) Hyprland.refreshToplevels()
+    monitor = p.monitor || ""
     items = p.items
     index = p.index
     accent = p.accent || "white"
@@ -75,11 +81,12 @@ Scope {
   PanelWindow {
     id: panel
 
+    // The focused monitor, as sidebar.lua sends it (not Hyprland.focusedMonitor,
+    // which goes stale with the shell's event connection).
     screen: {
-      var focused = Hyprland.focusedMonitor
       var screens = Quickshell.screens
       for (var i = 0; i < screens.length; i++) {
-        if (focused && screens[i].name === focused.name) return screens[i]
+        if (screens[i].name === root.monitor) return screens[i]
       }
       return screens.length > 0 ? screens[0] : null
     }

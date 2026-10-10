@@ -1344,8 +1344,10 @@ local function switcher_update()
       json_string(w.address), json_string(w.title or w.class or ""), w.size.x, w.size.y)
   end
   local hex = (sidebar_border and sidebar_border[1]:match("^rgba%((%x%x%x%x%x%x)")) or theme_foreground
-  switcher_send("show", string.format('{"session":%s,"seq":%d,"index":%d,"accent":%s,"items":[%s]}',
-    json_string(switcher_session), switcher.seq, switcher.index - 1, json_string(hex and ("#" .. hex) or "#ffffff"), table.concat(items, ",")))
+  local monitor = hl.get_active_monitor()
+  switcher_send("show", string.format('{"session":%s,"seq":%d,"index":%d,"accent":%s,"monitor":%s,"items":[%s]}',
+    json_string(switcher_session), switcher.seq, switcher.index - 1, json_string(hex and ("#" .. hex) or "#ffffff"),
+    json_string(monitor and monitor.name or ""), table.concat(items, ",")))
 end
 
 local function switcher_close()
