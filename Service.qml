@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
 
 // Omarchy shell plugins can't ship Hyprland config, so this service loads
@@ -87,10 +86,47 @@ Item {
     }
   }
 
-  Connections {
-    target: Hyprland
-    function onRawEvent(event) {
-      if (String(event && event.name ? event.name : "") === "configreloaded") root.load()
+  // Hyprland's events, on a connection of the sidebar's own. The shell's (the
+  // Hyprland module's) is made once and never again if Hyprland closes it
+  // (quickshell #989); after that a reload left the sidebar unloaded until the
+  // shell restarted. This one is made afresh until it connects again. It loads
+  // on connecting, in case a reload came while it was down.
+  function eventsUp() {
+    reconnect.stop()
+    load()
+  }
+
+  function eventsDown() {
+    reconnect.restart()
+  }
+
+  LazyLoader {
+    id: events
+    active: true
+
+    Socket {
+      path: Quickshell.env("XDG_RUNTIME_DIR") + "/hypr/" + Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") + "/.socket2.sock"
+      connected: true
+      onConnectionStateChanged: connected ? root.eventsUp() : root.eventsDown()
+      // A socket that connects at once does so before the handler above is
+      // attached, and one that fails never changes state: so check.
+      Component.onCompleted: Qt.callLater(function() { connected ? root.eventsUp() : root.eventsDown() })
+      parser: SplitParser {
+        onRead: function(line) {
+          if (line.split(">>")[0] === "configreloaded") root.load()
+        }
+      }
+    }
+  }
+
+  // A fresh socket each try: setting `connected` again after a failed try
+  // doesn't try again.
+  Timer {
+    id: reconnect
+    interval: 2000
+    onTriggered: {
+      events.active = false
+      events.active = true
     }
   }
 
