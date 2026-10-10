@@ -972,6 +972,7 @@ end)
 -- app, kept in themes/<app> as an Omarchy theme's folder name. The agent's
 -- windows share "agent"; any other window goes by its class.
 local themes_root = state_root .. "/themes"
+local home_dir = os.getenv("HOME") -- (`home` is the drawer's by now)
 local omarchy_path = os.getenv("OMARCHY_PATH") or "/usr/share/omarchy"
 
 local function theme_app(window)
@@ -994,7 +995,7 @@ local function chosen_theme(window)
 end
 
 local function theme_colors_of(name)
-  for _, root in ipairs({ home .. "/.config/omarchy/themes/", omarchy_path .. "/themes/" }) do
+  for _, root in ipairs({ home_dir .. "/.config/omarchy/themes/", omarchy_path .. "/themes/" }) do
     local f = io.open(root .. name .. "/colors.toml", "r")
     if f then
       local text = "\n" .. f:read("a")
@@ -1014,7 +1015,7 @@ end
 -- Omarchy sets every Foot terminal's colours on a theme change (after the
 -- reload that restyles the sidebars), so a hook puts the picked ones back.
 do
-  local hook_dir = home .. "/.config/omarchy/hooks/theme-set.d"
+  local hook_dir = home_dir .. "/.config/omarchy/hooks/theme-set.d"
   local hook = hook_dir .. "/omarchy-sidebar-themes"
   local f = io.open(hook, "r")
   if f then
