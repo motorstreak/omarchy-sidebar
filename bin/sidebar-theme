@@ -1,0 +1,110 @@
+#!/bin/bash
+# Omarchy themes for sidebars (SUPER + ALT + T in a sidebar), one per app: the
+# agent's windows share one, any other window goes by its class. The choice is
+# kept in ~/.local/state/omarchy-sidebar/themes/<app> as the theme's folder
+# name. hypr/sidebar.lua gives the sidebars that theme's border; a terminal's
+# colours are set here, the way Omarchy sets every Foot terminal's on a theme
+# change (omarchy-theme-osc, written to the terminal's pty). An app that isn't
+# a terminal, or a terminal running all its windows in one process, keeps its
+# own colours.
+#
+#   sidebar-theme pick ADDRESS APP     ask for APP's theme, then restyle sidebars
+#   sidebar-theme apply ADDRESS APP    the window's terminal in APP's theme
+#                                      (the current Omarchy theme if none)
+#   sidebar-theme restore ADDRESS APP  the window's terminal in the current theme
+
+set -uo pipefail
+
+state=${XDG_STATE_HOME:-$HOME/.local/state}
+themes=$state/omarchy-sidebar/themes
+current=$state/omarchy/current/theme/colors.toml
+omarchy_path=${OMARCHY_PATH:-/usr/share/omarchy}
+FOLLOW="Follow system theme"
+
+action=${1:-}
+address=${2:-}
+app=${3:-}
+[[ -n $action && -n $address && $app =~ ^[A-Za-z0-9._-]+$ ]] || {
+  echo "Usage: sidebar-theme pick|apply|restore ADDRESS APP" >&2
+  exit 1
+}
+
+# A theme's colors.toml by its folder name, yours before Omarchy's.
+colors_of() {
+  local root
+  for root in "$HOME/.config/omarchy/themes" "$omarchy_path/themes"; do
+    if [[ -f $root/$1/colors.toml ]]; then
+      echo "$root/$1/colors.toml"
+      return
+    fi
+  done
+}
+
+# The pty the window's program runs in: the one its process's children write
+# to. None when there are several (one terminal process for many windows).
+terminal_of() {
+  local pid ttys child
+  pid=$(hyprctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .pid')
+  [[ $pid =~ ^[0-9]+$ ]] || return
+  ttys=$(for child in $(pgrep -P "$pid"); do readlink "/proc/$child/fd/1" 2>/dev/null; done |
+    grep '^/dev/pts/' | sort -u)
+  [[ -n $ttys && $(wc -l <<<"$ttys") -eq 1 ]] && echo "$ttys"
+}
+
+# The window's terminal in a colors.toml's colours. A window just opened may
+# not have started its program yet: waited for, briefly.
+paint() {
+  local colors=$1 tty="" i osc
+  [[ -f $colors ]] || return
+  for i in {1..30}; do
+    tty=$(terminal_of "$address")
+    [[ -n $tty ]] && break
+    sleep 0.1
+  done
+  [[ -n $tty && -w $tty ]] || return
+  osc=$(omarchy-theme-osc "$colors")
+  [[ -n $osc ]] && printf '%b' "$osc" >"$tty"
+}
+
+case $action in
+  apply)
+    name=$(head -n1 "$themes/$app" 2>/dev/null)
+    colors=$([[ -n $name ]] && colors_of "$name")
+    paint "${colors:-$current}"
+    ;;
+  restore)
+    paint "$current"
+    ;;
+  pick)
+    chosen=$(head -n1 "$themes/$app" 2>/dev/null)
+    declare -A slug_of
+    options=("$FOLLOW")
+    while IFS= read -r slug; do
+      label=$(sed -E 's/(^|-)([a-z])/\1\u\2/g; s/-/ /g' <<<"$slug")
+      slug_of[$label]=$slug
+      if [[ $slug == "$chosen" ]]; then
+        options+=($'\t'"$label")
+      else
+        options+=("$label")
+      fi
+    done < <({
+      find "$HOME/.config/omarchy/themes/" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -printf '%f\n'
+      find "$omarchy_path/themes/" -mindepth 1 -maxdepth 1 -type d -printf '%f\n'
+    } 2>/dev/null | sort -u)
+
+    choice=$(omarchy-menu-select "Sidebar theme" "${options[@]}") || exit 0
+    mkdir -p "$themes"
+    if [[ $choice == "$FOLLOW" ]]; then
+      rm -f "$themes/$app"
+    elif [[ -n ${slug_of[$choice]:-} ]]; then
+      echo "${slug_of[$choice]}" >"$themes/$app"
+    else
+      exit 0
+    fi
+    hyprctl eval 'sidebar.retheme()' >/dev/null
+    ;;
+  *)
+    echo "Usage: sidebar-theme pick|apply|restore ADDRESS APP" >&2
+    exit 1
+    ;;
+esac

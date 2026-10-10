@@ -46,6 +46,7 @@ Inside a sidebar that has focus:
 | Key | Action |
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
+| `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent and other windows |
 | `Super + Alt + Left/Right` | Dock it to that screen edge, keeping its size (remembered like a move) |
@@ -108,6 +109,7 @@ return {
     convert = "SUPER + ALT + B",
     escape = true,       -- Super + Escape hides it (false: it opens the system menu)
     cycle = true,        -- Super + Tab shows the next sidebar (false: the next workspace)
+    theme = "SUPER + ALT + T", -- in a sidebar: pick a theme for that app's sidebars
   },
   agent = {
     enabled = true,      -- false leaves out the agent sidebar
@@ -137,6 +139,24 @@ special workspace animation into a fade like `fade = true` (the scratchpad
 fades too). An edge with another monitor beyond it gets a short slide, so the
 sidebar doesn't show on that monitor on its way in. Set `drawer = false` for
 Omarchy's vertical slide.
+
+## Sidebar themes
+
+`Super + Alt + T` in a sidebar lists your installed Omarchy themes; the one you
+pick is used by every sidebar of that app (all agent sessions share one, any
+other window goes by its app), until you pick "Follow system theme" again.
+
+- The sidebar's border takes its colour from that theme.
+- A terminal sidebar (Foot, or any terminal running one process per window)
+  also takes the theme's background, text and palette, set the way Omarchy
+  sets every Foot terminal's on a theme change. When it stops being a sidebar
+  it goes back to the current theme's colours.
+- An app that draws its own colours (a browser, say) only gets the border.
+- Claude Code colours its own text from the Omarchy theme (Omarchy sets it), so
+  in a sidebar with another theme only its background and palette change.
+
+The plugin adds a hook, `~/.config/omarchy/hooks/theme-set.d/omarchy-sidebar-themes`,
+so a sidebar's theme survives Omarchy theme changes.
 
 ## The agent sidebar
 

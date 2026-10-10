@@ -127,6 +127,9 @@ local defaults = {
     convert = "SUPER + ALT + B",
     escape = true, -- SUPER + ESCAPE hides it (instead of opening the system menu)
     cycle = true, -- SUPER + TAB shows the next sidebar (instead of the next workspace)
+    -- (a sidebar focused) pick an Omarchy theme for that app's sidebars: their
+    -- border, and a terminal's colours
+    theme = "SUPER + ALT + T",
   },
   agent = {
     enabled = true,
@@ -180,7 +183,7 @@ local SYSTEM_MENU = "omarchy-menu toggle system"
 
 local key_options = {
   [""] = { border = true },
-  sidebar = { toggle = true, convert = true },
+  sidebar = { toggle = true, convert = true, theme = true },
   agent = { toggle = true, new = true, load = true, reset = true },
 }
 
@@ -925,32 +928,115 @@ local PALETTE = {
   bright_red = "color9", bright_green = "color10", bright_yellow = "color11",
   bright_blue = "color12", bright_magenta = "color13", bright_cyan = "color14",
 }
-local function theme_colour(name)
+local function colour_in(colors, name)
   local pattern = '%s*=%s*"#?(%x%x%x%x%x%x)"'
-  return theme_colors:match("\n%s*" .. name .. pattern)
-    or (PALETTE[name] and theme_colors:match("\n%s*" .. PALETTE[name] .. pattern))
+  return colors:match("\n%s*" .. name .. pattern)
+    or (PALETTE[name] and colors:match("\n%s*" .. PALETTE[name] .. pattern))
+end
+local function theme_colour(name)
+  return colour_in(theme_colors, name)
 end
 -- The switcher's highlight.
 local theme_foreground = theme_colour("foreground")
-do
+
+-- The border colours for a theme's colors.toml (as text), or nil (with
+-- `missing` called) when the `border` colour isn't in it.
+local function border_from(colors, missing)
   local spec = config.border
-  if spec and not no_border then
-    local hex = spec:match("^#(%x%x%x%x%x%x)$")
-    if spec == "theme" then
-      hex = theme_foreground
-    elseif spec:match("^[%a_]+$") then
-      hex = theme_colour(spec)
-      if hex == nil then
-        notify("No colour \"" .. spec .. "\" in the theme; sidebars keep the usual border")
+  if not spec or no_border then
+    return nil
+  end
+  local hex = spec:match("^#(%x%x%x%x%x%x)$")
+  if spec == "theme" then
+    hex = colour_in(colors, "foreground")
+  elseif spec:match("^[%a_]+$") then
+    hex = colour_in(colors, spec)
+    if hex == nil then
+      if missing then
+        missing()
       end
-    elseif hex == nil then
-      sidebar_border = { spec, spec }
+      return nil
     end
-    -- The same focused or not, so it reads as part of the window.
-    if hex then
-      local alpha = string.format("%02x", math.floor(config.border_opacity * 255 + 0.5))
-      sidebar_border = { "rgba(" .. hex .. alpha .. ")", "rgba(" .. hex .. alpha .. ")" }
+  elseif hex == nil then
+    return { spec, spec }
+  end
+  -- The same focused or not, so it reads as part of the window.
+  local alpha = string.format("%02x", math.floor(config.border_opacity * 255 + 0.5))
+  return { "rgba(" .. hex .. alpha .. ")", "rgba(" .. hex .. alpha .. ")" }
+end
+sidebar_border = border_from(theme_colors, function()
+  notify("No colour \"" .. config.border .. "\" in the theme; sidebars keep the usual border")
+end)
+
+-- Themes picked for sidebars (SUPER + ALT + T, bin/sidebar-theme): one per
+-- app, kept in themes/<app> as an Omarchy theme's folder name. The agent's
+-- windows share "agent"; any other window goes by its class.
+local themes_root = state_root .. "/themes"
+local omarchy_path = os.getenv("OMARCHY_PATH") or "/usr/share/omarchy"
+
+local function theme_app(window)
+  if is_agent(window) then
+    return "agent"
+  end
+  local class = window.class or ""
+  return class ~= "" and not class:find("/", 1, true) and class or nil
+end
+
+local function chosen_theme(window)
+  local app = theme_app(window)
+  local f = app and io.open(themes_root .. "/" .. app, "r")
+  if not f then
+    return nil
+  end
+  local name = (f:read("l") or ""):match("^[%w._-]+$")
+  f:close()
+  return name
+end
+
+local function theme_colors_of(name)
+  for _, root in ipairs({ home .. "/.config/omarchy/themes/", omarchy_path .. "/themes/" }) do
+    local f = io.open(root .. name .. "/colors.toml", "r")
+    if f then
+      local text = "\n" .. f:read("a")
+      f:close()
+      return text
     end
+  end
+end
+
+-- The window's border colours: from its app's theme, else the current one's.
+local function border_for(window)
+  local name = chosen_theme(window)
+  local colors = name and theme_colors_of(name)
+  return colors and border_from(colors) or sidebar_border
+end
+
+-- Omarchy sets every Foot terminal's colours on a theme change (after the
+-- reload that restyles the sidebars), so a hook puts the picked ones back.
+do
+  local hook_dir = home .. "/.config/omarchy/hooks/theme-set.d"
+  local hook = hook_dir .. "/omarchy-sidebar-themes"
+  local f = io.open(hook, "r")
+  if f then
+    f:close()
+  else
+    os.execute("mkdir -p " .. quote(hook_dir))
+    f = io.open(hook, "w")
+    if f then
+      f:write("#!/bin/bash\n# Sidebars picked a theme of their own keep it (the Sidebar plugin).\n",
+        "hyprctl eval 'if sidebar then sidebar.retheme() end' >/dev/null 2>&1 || true\n")
+      f:close()
+      os.execute("chmod +x " .. quote(hook))
+    end
+  end
+end
+
+-- A terminal's colours follow its app's theme ("apply"), or go back to the
+-- current one's ("restore"): bin/sidebar-theme writes them to its terminal.
+local function theme_terminal(window, action)
+  local app = theme_app(window)
+  if app then
+    hl.exec_cmd(quote(dir .. "/bin/sidebar-theme") .. " " .. action .. " " .. quote(window.address) .. " " .. quote(app))
   end
 end
 
@@ -1018,8 +1104,9 @@ local function style(window)
     -- The width even if the colour wasn't found (the usual colour then).
     dispatch_for(window, hl.dsp.window.set_prop, {
       prop = "border_size", value = config.border_size and tostring(math.floor(config.border_size)) or "unset" })
-    if sidebar_border then
-      set_border(window, sidebar_border[1], sidebar_border[2])
+    local colours = border_for(window)
+    if colours then
+      set_border(window, colours[1], colours[2])
     end
   end
 end
@@ -1060,6 +1147,9 @@ local function leave(window)
   hide_if_empty(window.address)
   set_dim(window, false)
   unstyle(window)
+  if chosen_theme(window) then
+    theme_terminal(window, "restore")
+  end
   -- Back to floating (centred) or tiled a moment later, not inside the event
   -- that moved it out: that can come from a monitor being reconfigured, and
   -- Hyprland crashed centring a window then. Left be if it went back in.
@@ -1137,6 +1227,9 @@ local function enter(window, opened)
   end
   set_dim(window, false) -- dimmed by the window before 0.3.1
   style(window)
+  if chosen_theme(window) then
+    theme_terminal(window, "apply")
+  end
 
   -- Dock once floating has settled, or Hyprland restores the window's old
   -- floating position over ours; by then it may have closed or moved on.
@@ -1208,7 +1301,21 @@ end
 -- Defined with the switcher further down.
 local cycle
 
+-- SUPER + ALT + T in a sidebar: bin/sidebar-theme asks for a theme for the
+-- focused sidebar's app and has the sidebars re-styled (sidebar.retheme).
+local function pick_theme()
+  local window = hl.get_active_window()
+  local app = window and is_member(window) and theme_app(window)
+  if app then
+    hl.exec_cmd(quote(dir .. "/bin/sidebar-theme") .. " pick " .. quote(window.address) .. " " .. quote(app))
+  end
+end
+
 local function bind_sidebar_keys()
+  if config.sidebar.theme then
+    hl.unbind(config.sidebar.theme)
+    o.bind(config.sidebar.theme, "Sidebar theme", guard("picking a sidebar theme", pick_theme))
+  end
   if config.sidebar.cycle then
     hl.unbind(CYCLE_KEY[1])
     o.bind(CYCLE_KEY[1], "Next sidebar", guard("showing the next sidebar", function()
@@ -1239,6 +1346,9 @@ local function bind_sidebar_keys()
 end
 
 local function bind_omarchy_keys()
+  if config.sidebar.theme then
+    hl.unbind(config.sidebar.theme)
+  end
   if config.sidebar.cycle then
     hl.unbind(CYCLE_KEY[1])
     o.bind(CYCLE_KEY[1], CYCLE_KEY[2], hl.dsp.focus({ workspace = CYCLE_KEY[3] }))
@@ -1372,6 +1482,9 @@ do
       unstyle(w) -- the usual border colours
     end
     style(w)
+    if chosen_theme(w) then
+      theme_terminal(w, "apply")
+    end
     docked_on[w.address] = w.monitor and w.monitor.id
     if taken[w.workspace.name] then
       local target = free_workspace()
@@ -1967,6 +2080,17 @@ sidebar = {
   end,
   -- SUPER + ESCAPE, for testing without keys.
   hide = hide_shown,
+  -- Every sidebar's border and terminal colours as their apps' themes say,
+  -- after one was picked (bin/sidebar-theme) or Omarchy's theme changed (the
+  -- theme-set hook).
+  retheme = function()
+    for _, w in ipairs(sidebar_windows()) do
+      if members[w.address] then
+        style(w)
+        theme_terminal(w, "apply")
+      end
+    end
+  end,
   convert = convert,
   swap = swap,
   dock = dock_to,
