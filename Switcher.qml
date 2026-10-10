@@ -327,44 +327,52 @@ Scope {
               layer.enabled: true
             }
 
+            // The card as drawn, rounded corners and all, for the reflection to
+            // copy (copying `face` itself would skip its own corner mask).
             Item {
-              id: face
+              id: cover
               width: tile.width
               height: tile.height
-              clip: true
-              layer.enabled: true
-              layer.smooth: true
-              layer.effect: MultiEffect {
-                maskEnabled: true
-                maskSource: corners
-                maskThresholdMin: 0.3
-                maskSpreadAtMin: 0.3
-              }
 
-              Rectangle {
-                anchors.fill: parent
-                color: Color.background
-              }
+              Item {
+                id: face
+                width: tile.width
+                height: tile.height
+                clip: true
+                layer.enabled: true
+                layer.smooth: true
+                layer.effect: MultiEffect {
+                  maskEnabled: true
+                  maskSource: corners
+                  maskThresholdMin: 0.3
+                  maskSpreadAtMin: 0.3
+                }
 
-              // The window filling the card, cropped to it.
-              ScreencopyView {
-                anchors.centerIn: parent
-                width: Math.max(tile.width, tile.height * tile.aspect)
-                height: width / tile.aspect
-                captureSource: root.capture(tile.modelData.address)
-                live: true
-              }
+                Rectangle {
+                  anchors.fill: parent
+                  color: Color.background
+                }
 
-              Rectangle {
-                anchors.fill: parent
-                color: Util.alpha(Color.background, tile.chosen ? 0 : 0.42)
-                Behavior on color { ColorAnimation { duration: 280 } }
-              }
+                // The window filling the card, cropped to it.
+                ScreencopyView {
+                  anchors.centerIn: parent
+                  width: Math.max(tile.width, tile.height * tile.aspect)
+                  height: width / tile.aspect
+                  captureSource: root.capture(tile.modelData.address)
+                  live: true
+                }
 
+                Rectangle {
+                  anchors.fill: parent
+                  color: Util.alpha(Color.background, tile.chosen ? 0 : 0.42)
+                  Behavior on color { ColorAnimation { duration: 280 } }
+                }
+
+              }
             }
 
             Rectangle {
-              anchors.fill: face
+              anchors.fill: cover
               radius: content.flowRadius
               color: "transparent"
               border.color: tile.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
@@ -388,7 +396,7 @@ Scope {
 
               ShaderEffectSource {
                 anchors.fill: parent
-                sourceItem: face
+                sourceItem: cover
                 sourceRect: Qt.rect(0, face.height - reflection.height, face.width, reflection.height)
                 transform: Scale { origin.y: reflection.height / 2; yScale: -1 }
               }
