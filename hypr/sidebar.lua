@@ -1146,6 +1146,11 @@ local function enter(window, opened)
     if now and members[address] and now.floating and in_sidebar(now) then
       dock_default(now)
     end
+    -- Again, after whatever else reacted to the move (the Dock plugin hands a
+    -- window it pinned its shadow back).
+    if now and members[address] then
+      style(now)
+    end
     sync_keys()
   end), { timeout = 50, type = "oneshot" })
   sync_keys()
