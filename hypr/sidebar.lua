@@ -600,6 +600,23 @@ local function margins()
   return top + b, right + b, bottom + b, left + b
 end
 
+-- The space the Dock plugin reserves for windows pinned to the monitor's left
+-- and right edges (its invisible strips): sidebars slide over pinned windows
+-- rather than keep out of their way, as they only show for a moment.
+local function dock_strips(m, mw)
+  local left, right = 0, 0
+  for _, l in ipairs(hl.get_layers()) do
+    if l.mapped and l.namespace == "omarchy-dock-strip" then
+      if math.abs(l.x - m.x) < 2 and l.x + l.w < m.x + mw then
+        left = math.max(left, l.w)
+      elseif math.abs(l.x + l.w - (m.x + mw)) < 2 and l.x > m.x then
+        right = math.max(right, l.w)
+      end
+    end
+  end
+  return left, right
+end
+
 local function area(m)
   local r = m.reserved or {}
   local top, right, bottom, left = margins()
@@ -608,9 +625,10 @@ local function area(m)
   if (m.transform or 0) % 2 == 1 then
     mw, mh = mh, mw
   end
+  local dock_left, dock_right = dock_strips(m, mw)
   return {
-    left = m.x + (r.left or 0) + left,
-    right = m.x + mw - (r.right or 0) - right,
+    left = m.x + math.max(0, (r.left or 0) - dock_left) + left,
+    right = m.x + mw - math.max(0, (r.right or 0) - dock_right) - right,
     top = m.y + (r.top or 0) + top,
     bottom = m.y + mh - (r.bottom or 0) - bottom,
     width = mw,
