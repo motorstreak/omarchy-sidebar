@@ -17,8 +17,9 @@
 -- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
 -- plugin does, for its coding agent): see `sidebar.kinds` at the end.
 --
--- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + arrows (or
--- SUPER + ALT + arrows) dock it to that screen edge, and Omarchy's resize
+-- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + arrows snap
+-- it to that screen edge or corner, SUPER + ALT + arrows make it full width or
+-- height, SUPER + T fills the screen, and Omarchy's resize
 -- keys resize it from the side nearer a screen edge; where it was put is
 -- remembered separately for each kind and for other windows.
 --
@@ -160,17 +161,18 @@ local swap_keys = {
   { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
 }
 -- Omarchy's keys for focusing the window beside it and for moving a window
--- into the group beside it; in the sidebar both dock it to that screen edge.
--- Each with how Omarchy binds it.
+-- into the group beside it; in the sidebar the first snap it to that screen
+-- edge, the second (marked `stretch`) make it full width or height. Each with
+-- how Omarchy binds it.
 local group_keys = {
   { "SUPER + LEFT", "Focus on left window", "l", hl.dsp.focus({ direction = "l" }) },
   { "SUPER + RIGHT", "Focus on right window", "r", hl.dsp.focus({ direction = "r" }) },
   { "SUPER + UP", "Focus on above window", "u", hl.dsp.focus({ direction = "u" }) },
   { "SUPER + DOWN", "Focus on below window", "d", hl.dsp.focus({ direction = "d" }) },
-  { "SUPER + ALT + LEFT", "Move window to group on left", "l", hl.dsp.window.move({ into_group = "l" }) },
-  { "SUPER + ALT + RIGHT", "Move window to group on right", "r", hl.dsp.window.move({ into_group = "r" }) },
-  { "SUPER + ALT + UP", "Move window to group on top", "u", hl.dsp.window.move({ into_group = "u" }) },
-  { "SUPER + ALT + DOWN", "Move window to group on bottom", "d", hl.dsp.window.move({ into_group = "d" }) },
+  { "SUPER + ALT + LEFT", "Move window to group on left", "l", hl.dsp.window.move({ into_group = "l" }), true },
+  { "SUPER + ALT + RIGHT", "Move window to group on right", "r", hl.dsp.window.move({ into_group = "r" }), true },
+  { "SUPER + ALT + UP", "Move window to group on top", "u", hl.dsp.window.move({ into_group = "u" }), true },
+  { "SUPER + ALT + DOWN", "Move window to group on bottom", "d", hl.dsp.window.move({ into_group = "d" }), true },
 }
 -- Omarchy's float/tile toggle; in the sidebar it fills the screen (within the
 -- sidebar margins) and back, the sidebar staying floating.
@@ -1449,6 +1451,25 @@ local function fill()
   end
 end
 
+-- SUPER + ALT + arrows in the sidebar: LEFT/RIGHT make it full width, UP/DOWN
+-- full height, keeping its place the other way. A tiled one floats and fills
+-- the screen. Any other window gets the key's Omarchy action.
+local function stretch(direction, omarchy)
+  local window = hl.get_active_window()
+  if is_member(window) and window.floating and window.monitor then
+    local a = area(window.monitor)
+    if direction == "l" or direction == "r" then
+      place(window, a.right - a.left, window.size.y, a.left, window.at.y)
+    else
+      place(window, window.size.x, a.bottom - a.top, window.at.x, a.top)
+    end
+  elseif is_member(window) and window.monitor and showing(window) then
+    fill()
+  else
+    hl.dispatch(omarchy)
+  end
+end
+
 -- Defined with the switcher further down.
 local cycle
 
@@ -1510,10 +1531,14 @@ local function bind_sidebar_keys()
     end), { repeating = true })
   end
   for _, g in ipairs(group_keys) do
-    local direction, omarchy = g[3], g[4]
+    local direction, omarchy, stretches = g[3], g[4], g[5]
     hl.unbind(g[1])
-    o.bind(g[1], "Dock sidebar to the edge", guard(g[2], function()
-      dock_to(direction, omarchy)
+    o.bind(g[1], stretches and "Sidebar full width/height" or "Dock sidebar to the edge", guard(g[2], function()
+      if stretches then
+        stretch(direction, omarchy)
+      else
+        dock_to(direction, omarchy)
+      end
     end))
   end
 end
@@ -2225,6 +2250,7 @@ sidebar = {
   swap = swap,
   dock = dock_to,
   fill = fill,
+  stretch = stretch,
   resize = resize,
   release = release,
   -- The switcher's SUPER release and SUPER + ESCAPE, for testing without keys.
