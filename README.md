@@ -47,7 +47,7 @@ Inside a sidebar that has focus:
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Left/Right` (or `Super + Alt + Left/Right`) | Dock it to that screen edge, keeping its size (remembered like a move) |
-| `Super + Equal / Minus` | Wider / narrower, as for a floating window: the left edge stays put, unless it's docked against the right screen edge, which then stays (`Alt` small steps, `Ctrl` big steps) |
+| `Super + Equal / Minus` | Wider / narrower (`+` always grows it). Docked against a screen edge, that edge stays put; anywhere else it grows and shrinks on both sides (`Alt` small steps, `Ctrl` big steps). `center_floating` does the same for any floating window |
 | `Super + Shift + Equal / Minus` | Taller / shorter; the top edge stays put |
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
 
@@ -100,6 +100,7 @@ return {
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
   switcher = true,       -- false: Super + Tab cycles sidebars directly, without previews
+  center_floating = false, -- true: Super + Equal/Minus resize any floating window on both sides (see below)
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -118,6 +119,13 @@ in the file are shown as a "Sidebar" notification.
 from one sidebar to the next. Hyprland has a single animation for every special
 workspace, so the scratchpad fades too, and it replaces any `specialWorkspace`
 animation in your own Hyprland config while the plugin is enabled.
+
+`center_floating = true` gives every floating window, not only sidebars, the
+sidebar's resize: `Super + Equal` widens it and `Super + Minus` narrows it on
+both sides round its centre (with `Shift`, taller and shorter, the top edge
+staying). Omarchy's own keys move only a floating window's right edge. Tiled
+windows keep Omarchy's resize, which moves the divider between windows; so do
+windows the Dock plugin pins, and popped-out (pinned) windows.
 
 `drawer = true` (the default) slides a sidebar in from the screen edge it's
 docked against, and back out to it when it hides, so it reads as a drawer

@@ -125,6 +125,11 @@ local defaults = {
   -- sidebar presses this key to open it, instead of the sidebar's picker, and
   -- the sidebar leaves their colours alone. Add yours; false drops one.
   own_themes = { ["org.omarchy.cliamp"] = "T" }, -- cliamp: T, "Choose theme"
+  -- Omarchy's resize keys (SUPER + MINUS/EQUAL) on any floating window, not
+  -- only sidebars: EQUAL ("+") widens it and MINUS narrows it on both sides
+  -- round its centre, instead of moving only its right edge. Tiled windows keep
+  -- Omarchy's resize.
+  center_floating = false,
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -1279,10 +1284,12 @@ end
 
 -- Focus-scoped keys -----------------------------------------------------------
 
--- In the sidebar: EQUAL ("+") widens and MINUS narrows it, as for Omarchy's
--- floating windows: the left edge stays, unless it's docked against the right
--- screen edge, where that edge stays. With SHIFT they change its height (the
--- top edge stays). Any other window gets Omarchy's resize.
+-- In the sidebar: EQUAL ("+") widens and MINUS narrows it. Docked against a
+-- screen edge, that edge stays; anywhere else it grows and shrinks on both
+-- sides (where one side meets a screen edge, the other takes the rest). With
+-- SHIFT they change its height (the top edge stays). Any other floating window
+-- does the same round its centre with `center_floating`; anything else gets
+-- Omarchy's resize.
 local function resize(dx, dy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating then
@@ -1292,9 +1299,16 @@ local function resize(dx, dy)
       local a = area(window.monitor)
       if a.right - (x + window.size.x) <= 1 then
         x = x + window.size.x - width -- against the right edge: it stays there
+      elseif x - a.left > 1 then
+        x = x - math.floor(dx / 2) -- in open space: both sides
       end
     end
     place(window, width, window.size.y + dy, x, window.at.y)
+  elseif config.center_floating and window and window.floating and not window.pinned then
+    local width = math.max(100, window.size.x + dx)
+    local height = math.max(100, window.size.y + dy)
+    dispatch_for(window, hl.dsp.window.resize, { x = width, y = height })
+    dispatch_for(window, hl.dsp.window.move, { x = window.at.x - math.floor((width - window.size.x) / 2), y = window.at.y })
   else
     hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
   end
@@ -1390,6 +1404,22 @@ local function bind_sidebar_keys()
   end
 end
 
+-- Omarchy's resize keys as Omarchy binds them, or with `center_floating` ours,
+-- which give tiled windows Omarchy's resize.
+local function bind_resize_keys()
+  for _, r in ipairs(resize_keys) do
+    local dx, dy = r[3], r[4]
+    hl.unbind(r[1])
+    if config.center_floating then
+      o.bind(r[1], r[2], guard(r[2], function()
+        resize(dx, dy)
+      end))
+    else
+      o.bind(r[1], r[2], hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
+    end
+  end
+end
+
 local function bind_omarchy_keys()
   if config.sidebar.theme then
     hl.unbind(config.sidebar.theme)
@@ -1398,10 +1428,7 @@ local function bind_omarchy_keys()
     hl.unbind(CYCLE_KEY[1])
     o.bind(CYCLE_KEY[1], CYCLE_KEY[2], hl.dsp.focus({ workspace = CYCLE_KEY[3] }))
   end
-  for _, r in ipairs(resize_keys) do
-    hl.unbind(r[1])
-    o.bind(r[1], r[2], hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
-  end
+  bind_resize_keys()
   for _, s in ipairs(swap_keys) do
     hl.unbind(s[1])
     o.bind(s[1], s[2], hl.dsp.window.swap({ direction = s[3] }))
@@ -2000,6 +2027,9 @@ end
 
 -- The sidebar may already have focus when this loads (e.g. after a reload).
 guard("loading", sync_keys)()
+if config.center_floating and not sidebar_keys and omarchy_default_bindings ~= false then
+  guard("binding the resize keys", bind_resize_keys)()
+end
 
 -- For scripting, tests and other plugins: `hyprctl eval 'sidebar.toggle()'` etc.
 sidebar = {
@@ -2106,5 +2136,10 @@ sidebar = {
   -- for pinned windows, checks this before handing them back to Omarchy.
   keys_taken = function()
     return sidebar_keys
+  end,
+  -- With `center_floating`, Omarchy's resize keys are ours everywhere: the
+  -- Dock plugin hands them back to `sidebar.resize` rather than to Omarchy.
+  centers_floating = function()
+    return config.center_floating
   end,
 }
