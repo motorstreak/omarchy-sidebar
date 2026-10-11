@@ -17,8 +17,8 @@
 -- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
 -- plugin does, for its coding agent): see `sidebar.kinds` at the end.
 --
--- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + LEFT/RIGHT
--- (or SUPER + ALT + LEFT/RIGHT) dock it to that screen edge, and Omarchy's resize
+-- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + arrows (or
+-- SUPER + ALT + arrows) dock it to that screen edge, and Omarchy's resize
 -- keys resize it from the side nearer a screen edge; where it was put is
 -- remembered separately for each kind and for other windows.
 --
@@ -165,8 +165,12 @@ local swap_keys = {
 local group_keys = {
   { "SUPER + LEFT", "Focus on left window", "l", hl.dsp.focus({ direction = "l" }) },
   { "SUPER + RIGHT", "Focus on right window", "r", hl.dsp.focus({ direction = "r" }) },
+  { "SUPER + UP", "Focus on above window", "u", hl.dsp.focus({ direction = "u" }) },
+  { "SUPER + DOWN", "Focus on below window", "d", hl.dsp.focus({ direction = "d" }) },
   { "SUPER + ALT + LEFT", "Move window to group on left", "l", hl.dsp.window.move({ into_group = "l" }) },
   { "SUPER + ALT + RIGHT", "Move window to group on right", "r", hl.dsp.window.move({ into_group = "r" }) },
+  { "SUPER + ALT + UP", "Move window to group on top", "u", hl.dsp.window.move({ into_group = "u" }) },
+  { "SUPER + ALT + DOWN", "Move window to group on bottom", "d", hl.dsp.window.move({ into_group = "d" }) },
 }
 -- Omarchy's key for the next workspace; in the sidebar (with `cycle`) it shows
 -- the next sidebar.
@@ -1318,15 +1322,27 @@ local function swap(direction)
 end
 
 -- In the sidebar: LEFT/RIGHT dock it to that screen edge, keeping its size and
--- height on screen. Any other window gets Omarchy's move into a group.
-local function dock_to(direction)
+-- height on screen; UP/DOWN to the top or bottom of the usable area (under
+-- the bar), keeping its size and side (a full-height one stays put). Any other
+-- window gets the key's Omarchy action (`omarchy`; by default a move into a
+-- group).
+local function dock_to(direction, omarchy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating and window.monitor then
     local a = area(window.monitor)
-    local x = direction == "l" and a.left or (a.right - window.size.x)
-    place(window, window.size.x, window.size.y, x, window.at.y)
+    local x, y = window.at.x, window.at.y
+    if direction == "l" then
+      x = a.left
+    elseif direction == "r" then
+      x = a.right - window.size.x
+    elseif direction == "u" then
+      y = a.top
+    else
+      y = a.bottom - window.size.y
+    end
+    place(window, window.size.x, window.size.y, x, y)
   else
-    hl.dispatch(hl.dsp.window.move({ into_group = direction }))
+    hl.dispatch(omarchy or hl.dsp.window.move({ into_group = direction }))
   end
 end
 
@@ -1385,10 +1401,10 @@ local function bind_sidebar_keys()
     end), { repeating = true })
   end
   for _, g in ipairs(group_keys) do
-    local direction = g[3]
+    local direction, omarchy = g[3], g[4]
     hl.unbind(g[1])
     o.bind(g[1], "Dock sidebar to the edge", guard(g[2], function()
-      dock_to(direction)
+      dock_to(direction, omarchy)
     end))
   end
 end
