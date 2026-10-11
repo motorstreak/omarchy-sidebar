@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sidebar",
   "name": "Sidebar",
-  "version": "0.27.1",
+  "version": "0.28.0",
   "author": "Navin Samuel",
   "description": "Turn any window into a docked, dimming sidebar you toggle with a key, cycle with Super+Tab, and theme per app. The coding agent sidebar is now the separate Agent Sidebar plugin.",
   "kinds": [

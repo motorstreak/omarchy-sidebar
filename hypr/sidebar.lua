@@ -1328,33 +1328,53 @@ end
 -- top one under the bar), keeping its size. Any other
 -- window gets the key's Omarchy action (`omarchy`; by default a move into a
 -- group).
+-- The snap itself, from the window's place `g` ({ x, y, width, height }).
+local function snap(window, direction, g)
+  local a = area(window.monitor)
+  local x, y, width, height = g.x, g.y, g.width, g.height
+  local full, half = a.bottom - a.top, math.floor((a.bottom - a.top) / 2)
+  local full_w, half_w = a.right - a.left, math.floor((a.right - a.left) / 2)
+  local at_top, at_bottom = y - a.top <= 1, a.bottom - (y + height) <= 1
+  local at_left, at_right = x - a.left <= 1, a.right - (x + width) <= 1
+  if direction == "l" or direction == "r" then
+    if width >= full_w - 1 then
+      width = half_w
+      x = direction == "l" and a.left or (a.right - half_w)
+    elseif math.abs(width - half_w) <= 2 and ((direction == "l" and at_right) or (direction == "r" and at_left)) then
+      width, x = full_w, a.left
+    else
+      x = direction == "l" and a.left or (a.right - width)
+    end
+  elseif height >= full - 1 then
+    height = half
+    y = direction == "u" and a.top or (a.bottom - half)
+  elseif math.abs(height - half) <= 2 and ((direction == "u" and at_bottom) or (direction == "d" and at_top)) then
+    height, y = full, a.top
+  else
+    y = direction == "u" and a.top or (a.bottom - height)
+  end
+  place(window, width, height, x, y)
+end
+
+-- A tiled sidebar (SUPER + T) fills the screen, so it snaps as a floating one
+-- that fills the usable area would: floated first, then snapped once floating
+-- has settled (Hyprland would put its old floating place back over ours).
 local function dock_to(direction, omarchy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating and window.monitor then
-    local a = area(window.monitor)
-    local x, y, width, height = window.at.x, window.at.y, window.size.x, window.size.y
-    local full, half = a.bottom - a.top, math.floor((a.bottom - a.top) / 2)
-    local full_w, half_w = a.right - a.left, math.floor((a.right - a.left) / 2)
-    local at_top, at_bottom = y - a.top <= 1, a.bottom - (y + height) <= 1
-    local at_left, at_right = x - a.left <= 1, a.right - (x + width) <= 1
-    if direction == "l" or direction == "r" then
-      if width >= full_w - 1 then
-        width = half_w
-        x = direction == "l" and a.left or (a.right - half_w)
-      elseif math.abs(width - half_w) <= 2 and ((direction == "l" and at_right) or (direction == "r" and at_left)) then
-        width, x = full_w, a.left
-      else
-        x = direction == "l" and a.left or (a.right - width)
+    snap(window, direction, { x = window.at.x, y = window.at.y, width = window.size.x, height = window.size.y })
+  elseif is_member(window) and window.monitor and showing(window) then
+    local address = window.address
+    dispatch_for(window, hl.dsp.window.float, { action = "enable" })
+    hl.timer(guard("snapping the sidebar", function()
+      local now = current(address)
+      if now and members[address] and now.floating and now.monitor then
+        local a = area(now.monitor)
+        snap(now, direction, { x = a.left, y = a.top, width = a.right - a.left, height = a.bottom - a.top })
+        style(now)
       end
-    elseif height >= full - 1 then
-      height = half
-      y = direction == "u" and a.top or (a.bottom - half)
-    elseif math.abs(height - half) <= 2 and ((direction == "u" and at_bottom) or (direction == "d" and at_top)) then
-      height, y = full, a.top
-    else
-      y = direction == "u" and a.top or (a.bottom - height)
-    end
-    place(window, width, height, x, y)
+      sync_keys()
+    end), { timeout = 50, type = "oneshot" })
   else
     hl.dispatch(omarchy or hl.dsp.window.move({ into_group = direction }))
   end
@@ -1526,7 +1546,9 @@ function sync_keys()
     escape_bound = want_escape
   end
 
-  local want_sidebar_keys = visible and window.floating == true and omarchy_default_bindings ~= false
+  -- Tiled too (SUPER + T): the arrows float it again, and the rest fall back
+  -- to Omarchy's for a tiled window.
+  local want_sidebar_keys = visible and omarchy_default_bindings ~= false
   if want_sidebar_keys ~= sidebar_keys then
     if want_sidebar_keys then
       bind_sidebar_keys()

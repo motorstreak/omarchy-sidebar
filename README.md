@@ -48,6 +48,7 @@ Inside a sidebar that has focus:
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Left/Right` (or `Super + Alt + Left/Right`) | Dock it to that screen edge, keeping its size (remembered like a move). Full width, it becomes the left or right half of the screen; half width, the other way grows it back to full width |
 | `Super + Up/Down` (or `Super + Alt + Up/Down`) | Snap it like a window to a corner: full height, it becomes the top or bottom half of the screen (with `Super + Left/Right`, any of the four corners); half height, the other way grows it back to full height; any other height, it moves to the top (under the bar) or bottom, keeping its size |
+| `Super + T` | Omarchy's tile/float toggle: a tiled sidebar fills the screen below the bar. The arrows above float it again, snapping as from full width and height (`Super + Left` gives the left half, and so on) |
 | `Super + Equal / Minus` | Wider / narrower (`+` always grows it). Docked against a screen edge, that edge stays put; anywhere else it grows and shrinks on both sides, as Omarchy's floating windows do (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Equal / Minus` | Taller / shorter; the top edge stays put |
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
