@@ -46,7 +46,7 @@ Inside a sidebar that has focus:
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
-| `Super + Left/Right` (or `Super + Alt + Left/Right`) | Dock it to that screen edge, keeping its size (remembered like a move) |
+| `Super + Left/Right` (or `Super + Alt + Left/Right`) | Dock it to that screen edge, keeping its size (remembered like a move). Full width, it becomes the left or right half of the screen; half width, the other way grows it back to full width |
 | `Super + Up/Down` (or `Super + Alt + Up/Down`) | Snap it like a window to a corner: full height, it becomes the top or bottom half of the screen (with `Super + Left/Right`, any of the four corners); half height, the other way grows it back to full height; any other height, it moves to the top (under the bar) or bottom, keeping its size |
 | `Super + Equal / Minus` | Wider / narrower (`+` always grows it). Docked against a screen edge, that edge stays put; anywhere else it grows and shrinks on both sides, as Omarchy's floating windows do (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Equal / Minus` | Taller / shorter; the top edge stays put |
