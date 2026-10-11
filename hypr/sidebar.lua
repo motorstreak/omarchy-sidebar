@@ -2224,6 +2224,7 @@ sidebar = {
   convert = convert,
   swap = swap,
   dock = dock_to,
+  fill = fill,
   resize = resize,
   release = release,
   -- The switcher's SUPER release and SUPER + ESCAPE, for testing without keys.
