@@ -97,7 +97,7 @@ local defaults = {
   -- the old strong dim).
   dim = 0.55,
   -- The sidebar's border: a colour name from the theme's colors.toml
-  -- ("green", "foreground", "cyan", "background", ...), "theme" (the foreground), a
+  -- ("green", "foreground", "accent", a palette slot like "color2", ...), "theme" (the foreground), a
   -- colour such as "#14B9B5" or "rgba(14b9b5ff)", "none", or false for the usual
   -- border. (In "background" and wide, it reads as padding around the content.)
   border = "green",
@@ -284,7 +284,7 @@ do
     problems[#problems + 1] = "border_size must be false or between 1 and 60"
     config.border_size = false
   end
-  if config.border and not config.border:match("^[%a_]+$")
+  if config.border and not config.border:match("^[%a_][%w_]*$")
       and not config.border:match("^#%x%x%x%x%x%x$") and not config.border:match("^rgba?%([%x, .]+%)$") then
     problems[#problems + 1] = "border must be a theme colour name, a colour like \"#14B9B5\", \"none\", or false"
     config.border = "theme"
@@ -1044,7 +1044,7 @@ local function border_from(colors, missing)
   local hex = spec:match("^#(%x%x%x%x%x%x)$")
   if spec == "theme" then
     hex = colour_in(colors, "foreground")
-  elseif spec:match("^[%a_]+$") then
+  elseif spec:match("^[%a_][%w_]*$") then
     hex = colour_in(colors, spec)
     if hex == nil then
       if missing then
@@ -2513,18 +2513,37 @@ open_settings = function()
   local window = hl.get_active_window()
   local theme = window and is_member(window) and chosen_theme(window)
   local colors = theme and theme_colors_of(theme) or theme_colors
-  local swatches = {}
-  for _, name in ipairs({ "green", "cyan", "blue", "magenta", "red", "yellow", "foreground", "accent", "theme" }) do
+  -- The theme's own colours to pick from, by the name `border` takes: its
+  -- accent, its text colour and the palette's six colours, plain and bright
+  -- (named by slot: what "green" is varies, some themes have none). The
+  -- current choice is added if it's another name ("green" before 0.32.7).
+  local options = {}
+  local function add(name, label)
     local hex = colour_in(colors, name == "theme" and "foreground" or name)
     if hex then
-      swatches[#swatches + 1] = json_string(name) .. ":" .. json_string("#" .. hex)
+      options[#options + 1] = string.format('{"name":%s,"label":%s,"hex":%s}',
+        json_string(name), json_string(label), json_string("#" .. hex))
     end
   end
+  add("accent", "accent")
+  add("foreground", "text colour")
+  for i = 1, 6 do
+    add("color" .. i, "palette " .. i)
+  end
+  for i = 9, 14 do
+    add("color" .. i, "bright " .. (i - 8))
+  end
+  local current = type(config.border) == "string" and config.border
+  if current and current ~= "none" and current ~= "accent" and current ~= "foreground"
+      and not current:match("^color%d+$") then
+    add(current, current)
+  end
+  options[#options + 1] = '{"name":"none","label":"none","hex":""}'
   local label = theme and theme:gsub("%-", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end)
   local m = hl.get_active_monitor()
-  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"swatches":{%s},"theme":%s}',
+  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"colours":[%s],"theme":%s}',
     json_string(m and m.name or ""), json_string(dir .. "/bin/sidebar-settings"), table.concat(parts, ","),
-    table.concat(swatches, ","), json_string(label or ""))
+    table.concat(options, ","), json_string(label or ""))
   hl.exec_cmd("omarchy-shell -q sidebar-settings open " .. quote(payload))
 end
 sidebar.settings = open_settings
@@ -2542,7 +2561,7 @@ sidebar.set_live = function(key, value)
       return
     end
   elseif key == "border" then
-    if type(value) ~= "string" or not value:match("^[%a_]+$") then
+    if type(value) ~= "string" or not value:match("^[%a_][%w_]*$") then
       return
     end
   else

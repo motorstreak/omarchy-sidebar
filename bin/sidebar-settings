@@ -30,7 +30,7 @@ while (($#)); do
   [[ $allowed == *" $key "* ]] || usage
   if [[ $value == true || $value == false || $value =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
     pairs+=("$key" "$value")
-  elif [[ $value =~ ^[A-Za-z_]+$ ]]; then
+  elif [[ $value =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
     pairs+=("$key" "\"$value\"")
   else
     usage

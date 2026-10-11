@@ -17,7 +17,7 @@ Scope {
   property string monitor: ""
   property string script: ""
   property var values: ({})
-  property var swatches: ({}) // border colour name -> "#rrggbb", as this sidebar shows it
+  property var colours: [] // [{ name, label, hex }]: the border colours of this sidebar's theme
   property string theme: "" // this sidebar's own theme, if it has one
   property var pending: ({}) // changed, not yet saved
   property int index: 0
@@ -31,7 +31,7 @@ Scope {
     { key: "width", label: "Default width", hint: "A new sidebar's width, as a share of the screen", type: "number", min: 0.15, max: 0.9, step: 0.01, unit: "%", fallback: 0.33 },
     { key: "margin", label: "Margin", hint: "Gap to the screen edges and the bar", type: "number", min: 0, max: 120, step: 4, unit: "px", fallback: 32 },
     { key: "rounding", label: "Rounding", hint: "Corner radius", type: "number", min: 0, max: 50, step: 2, unit: "px", fallback: 32 },
-    { key: "border", label: "Border colour", hint: "From the theme's colours", type: "enum", options: ["green", "cyan", "blue", "magenta", "red", "yellow", "foreground", "accent", "theme", "none"] },
+    { key: "border", label: "Border colour", hint: "From the theme's colours", type: "colour" },
     { key: "border_size", label: "Border width", hint: "Omarchy's windows have 2", type: "number", min: 1, max: 20, step: 1, unit: "px", fallback: 6 },
     { key: "border_opacity", label: "Border opacity", hint: "0 is clear, 100 solid", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 1 },
     { key: "shadow", label: "Shadow", hint: "A large, faint shadow around sidebars", type: "bool" },
@@ -46,7 +46,7 @@ Scope {
     monitor = String(p.monitor || "")
     script = String(p.script || "")
     values = p.values || {}
-    swatches = p.swatches || {}
+    colours = Array.isArray(p.colours) ? p.colours : []
     theme = String(p.theme || "")
     pending = {}
     open = true
@@ -62,13 +62,30 @@ Scope {
     var v = values[row.key]
     if (row.type === "bool") return v === true ? "On" : "Off"
     if (row.type === "enum") return String(v)
+    if (row.type === "colour") {
+      var c = colourOf(v)
+      return c ? c.label : String(v)
+    }
     if (typeof v !== "number") return "Omarchy's"
     return row.unit === "%" ? Math.round(v * 100) + "%" : Math.round(v) + " px"
   }
 
+  function colourOf(name) {
+    for (var i = 0; i < colours.length; i++) {
+      if (colours[i].name === name) return colours[i]
+    }
+    return null
+  }
+
   function change(row, step) {
     var v = values[row.key]
-    if (row.type === "bool") {
+    if (row.type === "colour") {
+      var at = -1
+      for (var j = 0; j < colours.length; j++) {
+        if (colours[j].name === String(v)) at = j
+      }
+      v = colours[((at < 0 ? 0 : at + step) + colours.length) % colours.length].name
+    } else if (row.type === "bool") {
       v = !(v === true)
     } else if (row.type === "enum") {
       var i = row.options.indexOf(String(v))
@@ -250,14 +267,14 @@ Scope {
 
             // The border colour as this sidebar shows it.
             Rectangle {
-              visible: row.modelData.key === "border" && color.a > 0
+              visible: row.modelData.type === "colour" && color.a > 0
               anchors.right: value.left
               anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
               width: Style.space(18)
               height: width
               radius: width / 4
-              color: root.swatches[root.values.border] || "transparent"
+              color: (root.colourOf(root.values.border) || {}).hex || "transparent"
               border.color: Util.alpha(Color.menu.text, 0.3)
               border.width: 1
             }
