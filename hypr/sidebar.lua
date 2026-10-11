@@ -1322,25 +1322,32 @@ local function swap(direction)
 end
 
 -- In the sidebar: LEFT/RIGHT dock it to that screen edge, keeping its size and
--- height on screen; UP/DOWN to the top or bottom of the usable area (under
--- the bar), keeping its size and side (a full-height one stays put). Any other
+-- height on screen. UP/DOWN snap it like a window to a screen corner: a
+-- full-height sidebar becomes the top or bottom half of the usable area (under
+-- the bar), a half-height one pressed the other way grows back to full height,
+-- and any other height moves to the top or bottom, keeping its size. Any other
 -- window gets the key's Omarchy action (`omarchy`; by default a move into a
 -- group).
 local function dock_to(direction, omarchy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating and window.monitor then
     local a = area(window.monitor)
-    local x, y = window.at.x, window.at.y
+    local x, y, height = window.at.x, window.at.y, window.size.y
+    local full, half = a.bottom - a.top, math.floor((a.bottom - a.top) / 2)
+    local at_top, at_bottom = y - a.top <= 1, a.bottom - (y + height) <= 1
     if direction == "l" then
       x = a.left
     elseif direction == "r" then
       x = a.right - window.size.x
-    elseif direction == "u" then
-      y = a.top
+    elseif height >= full - 1 then
+      height = half
+      y = direction == "u" and a.top or (a.bottom - half)
+    elseif math.abs(height - half) <= 2 and ((direction == "u" and at_bottom) or (direction == "d" and at_top)) then
+      height, y = full, a.top
     else
-      y = a.bottom - window.size.y
+      y = direction == "u" and a.top or (a.bottom - height)
     end
-    place(window, window.size.x, window.size.y, x, y)
+    place(window, window.size.x, height, x, y)
   else
     hl.dispatch(omarchy or hl.dsp.window.move({ into_group = direction }))
   end
