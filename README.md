@@ -46,7 +46,7 @@ Inside a sidebar that has focus:
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
-| `Super + Alt + Left/Right` | Dock it to that screen edge, keeping its size (remembered like a move) |
+| `Super + Left/Right` (or `Super + Alt + Left/Right`) | Dock it to that screen edge, keeping its size (remembered like a move) |
 | `Super + Minus / Equal` | Wider / narrower, keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Minus / Equal` | Shorter / taller; the top edge stays put |
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
@@ -71,10 +71,10 @@ plugin is installed.
 - Every key option replaces whatever was bound to that key before.
 - While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
   system menu), `Super + Tab` (next workspace), and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
-  swap (`Super + Shift + arrows`) and move-into-group (`Super + Alt + Left/Right`) keys. Everywhere else those are Omarchy's own
+  swap (`Super + Shift + arrows`), focus-left/right (`Super + Left/Right`) and move-into-group (`Super + Alt + Left/Right`) keys. Everywhere else those are Omarchy's own
   bindings: they start out untouched, and after a sidebar has had focus they
   are re-bound exactly as Omarchy defines them. So if you've customised the
-  system menu, resize, swap or group keys, your version is replaced by
+  system menu, resize, swap, focus or group keys, your version is replaced by
   Omarchy's until Hyprland reloads. With `omarchy_default_bindings = false`
   Omarchy's keys are left alone.
 - A plain left click has an extra binding (to hide a sidebar on a click

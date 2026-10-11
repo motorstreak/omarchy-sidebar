@@ -17,8 +17,8 @@
 -- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
 -- plugin does, for its coding agent): see `sidebar.kinds` at the end.
 --
--- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + ALT +
--- LEFT/RIGHT dock it to that screen edge, and Omarchy's resize
+-- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + LEFT/RIGHT
+-- (or SUPER + ALT + LEFT/RIGHT) dock it to that screen edge, and Omarchy's resize
 -- keys resize it from the side nearer a screen edge; where it was put is
 -- remembered separately for each kind and for other windows.
 --
@@ -159,11 +159,14 @@ local swap_keys = {
   { "SUPER + SHIFT + UP", "Swap window up", "u" },
   { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
 }
--- Omarchy's keys for moving a window into the group beside it; in the sidebar
--- they dock it to that screen edge.
+-- Omarchy's keys for focusing the window beside it and for moving a window
+-- into the group beside it; in the sidebar both dock it to that screen edge.
+-- Each with how Omarchy binds it.
 local group_keys = {
-  { "SUPER + ALT + LEFT", "Move window to group on left", "l" },
-  { "SUPER + ALT + RIGHT", "Move window to group on right", "r" },
+  { "SUPER + LEFT", "Focus on left window", "l", hl.dsp.focus({ direction = "l" }) },
+  { "SUPER + RIGHT", "Focus on right window", "r", hl.dsp.focus({ direction = "r" }) },
+  { "SUPER + ALT + LEFT", "Move window to group on left", "l", hl.dsp.window.move({ into_group = "l" }) },
+  { "SUPER + ALT + RIGHT", "Move window to group on right", "r", hl.dsp.window.move({ into_group = "r" }) },
 }
 -- Omarchy's key for the next workspace; in the sidebar (with `cycle`) it shows
 -- the next sidebar.
@@ -288,7 +291,7 @@ do
     seen[normalise(k[1])] = "Omarchy's swap keys"
   end
   for _, k in ipairs(group_keys) do
-    seen[normalise(k[1])] = "Omarchy's group keys"
+    seen[normalise(k[1])] = "Omarchy's focus and group keys"
   end
   for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "sidebar", "theme" } }) do
     local group, name = option[1], option[2]
@@ -1404,7 +1407,7 @@ local function bind_omarchy_keys()
   end
   for _, g in ipairs(group_keys) do
     hl.unbind(g[1])
-    o.bind(g[1], g[2], hl.dsp.window.move({ into_group = g[3] }))
+    o.bind(g[1], g[2], g[4])
   end
 end
 
