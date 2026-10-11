@@ -1,0 +1,104 @@
+#!/bin/bash
+# Writes options from the sidebar settings panel (SettingsPanel.qml,
+# SUPER + ALT + S in a sidebar) into ~/.config/omarchy/sidebar.lua, then reloads
+# Hyprland so hypr/sidebar.lua loads them.
+#
+#   sidebar-settings set KEY VALUE [KEY VALUE ...]
+#
+# Only the top-level options the panel offers, with plain values (true, false,
+# a number, or a word). An option already in the file has its value replaced
+# on its own line, keeping any comment after it; a new one is added at the end
+# of the table. Everything else in the file is left as it is.
+
+set -uo pipefail
+
+file=${SIDEBAR_CONFIG:-$HOME/.config/omarchy/sidebar.lua}
+allowed=" drawer fade dim width margin rounding border border_size border_opacity shadow click_outside switcher switcher_style floating_keys "
+
+usage() {
+  echo "Usage: sidebar-settings set KEY VALUE [KEY VALUE ...]" >&2
+  exit 1
+}
+
+[[ ${1:-} == set && $# -ge 3 && $(($# % 2)) -eq 1 ]] || usage
+shift
+
+pairs=()
+while (($#)); do
+  key=$1 value=$2
+  shift 2
+  [[ $allowed == *" $key "* ]] || usage
+  if [[ $value == true || $value == false || $value =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    pairs+=("$key" "$value")
+  elif [[ $value =~ ^[A-Za-z_]+$ ]]; then
+    pairs+=("$key" "\"$value\"")
+  else
+    usage
+  fi
+done
+
+if [[ ! -s $file ]]; then
+  mkdir -p "${file%/*}"
+  printf 'return {\n}\n' >"$file"
+fi
+
+tmp=$(mktemp) || exit 1
+trap 'rm -f "$tmp"' EXIT
+
+# Depth counts braces outside strings and comments; an option is a line at
+# depth 1 starting with its name. New ones go before the brace that closes the
+# returned table, with a comma after the entry before them if it had none.
+awk -v pairs="$(printf '%s\n' "${pairs[@]}")" '
+  BEGIN {
+    n = split(pairs, list, "\n")
+    for (i = 1; i + 1 <= n; i += 2) { want[list[i]] = list[i + 1]; order[++count] = list[i] }
+  }
+  { line[NR] = $0 }
+  END {
+    depth = 0; close_line = 0; on = 0
+    for (i = 1; i <= NR; i++) {
+      code = line[i]
+      sub(/--.*/, "", code)
+      gsub(/"[^"]*"/, "", code)
+      gsub(/\047[^\047]*\047/, "", code)
+      if (depth == 1) {
+        for (k in want) {
+          if (!(k in done) && match(line[i], "^[[:space:]]*" k "[[:space:]]*=")) {
+            indent = line[i]; sub(/[^[:space:]].*/, "", indent)
+            comment = ""
+            if (match(line[i], /[[:space:]]*--.*/)) comment = substr(line[i], RSTART)
+            line[i] = indent k " = " want[k] "," comment
+            done[k] = 1
+          }
+        }
+      }
+      opens = gsub(/{/, "{", code); closes = gsub(/}/, "}", code)
+      before = depth
+      depth += opens - closes
+      if (before >= 1 && depth == 0 && !close_line) close_line = i
+    }
+    for (i = 1; i <= NR; i++) {
+      if (i == close_line) {
+        for (j = 1; j <= count; j++) {
+          k = order[j]
+          if (k in done) continue
+          # A comma after the last entry, if it has none.
+          for (p = on; p > 0; p--) {
+            t = out[p]; sub(/[[:space:]]*--.*/, "", t); gsub(/[[:space:]]+$/, "", t)
+            if (t == "") continue
+            if (t !~ /[,{]$/) { c = out[p]; if (match(c, /[[:space:]]*--.*/)) out[p] = substr(c, 1, RSTART - 1) "," substr(c, RSTART); else out[p] = c "," }
+            break
+          }
+          out[++on] = "  " k " = " want[k] ","
+          done[k] = 1
+        }
+      }
+      out[++on] = line[i]
+    }
+    for (i = 1; i <= on; i++) print out[i]
+  }
+' "$file" >"$tmp" || exit 1
+
+# Written through, so a symlinked file (dotfiles) stays a link.
+cat "$tmp" >"$file"
+hyprctl reload >/dev/null

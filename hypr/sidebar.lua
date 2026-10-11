@@ -126,6 +126,11 @@ local defaults = {
   -- sidebar presses this key to open it, instead of the sidebar's picker, and
   -- the sidebar leaves their colours alone. Add yours; false drops one.
   own_themes = { ["org.omarchy.cliamp"] = "T" }, -- cliamp: T, "Choose theme"
+  -- Floating windows (not only sidebars) get the sidebar's keys that Omarchy
+  -- has no use for on them: SUPER + SHIFT + arrows move one against that
+  -- screen edge, SUPER + ALT + arrows make it full width or height and back.
+  -- Tiled windows keep Omarchy's swap and group keys.
+  floating_keys = false,
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -134,6 +139,8 @@ local defaults = {
     -- (a sidebar focused) pick an Omarchy theme for that app's sidebars: their
     -- border, and a terminal's colours
     theme = "SUPER + ALT + T",
+    -- (a sidebar focused) these settings in a panel, to flip them there
+    settings = "SUPER + ALT + S",
   },
 }
 
@@ -174,6 +181,10 @@ local group_keys = {
   { "SUPER + ALT + UP", "Move window to group on top", "u", hl.dsp.window.move({ into_group = "u" }), true },
   { "SUPER + ALT + DOWN", "Move window to group on bottom", "d", hl.dsp.window.move({ into_group = "d" }), true },
 }
+-- Omarchy's key for moving a window to the scratchpad: given back when the
+-- settings key (by default the same) no longer has a sidebar to act on.
+local SCRATCH_KEY = { "SUPER + ALT + S", "Move window to scratchpad",
+  hl.dsp.window.move({ workspace = "special:scratchpad", follow = false }) }
 -- Omarchy's float/tile toggle; in the sidebar it fills the screen (within the
 -- sidebar margins) and back, the sidebar staying floating.
 local FILL_KEY = { "SUPER + T", "Toggle window floating/tiling" }
@@ -189,7 +200,7 @@ local SYSTEM_MENU = "omarchy-menu toggle system"
 
 local key_options = {
   [""] = { border = true },
-  sidebar = { toggle = true, convert = true, theme = true },
+  sidebar = { toggle = true, convert = true, theme = true, settings = true },
 }
 
 -- Copies `overrides` onto `into` where the types fit the defaults (key options
@@ -302,7 +313,8 @@ do
   for _, k in ipairs(group_keys) do
     seen[normalise(k[1])] = "Omarchy's focus and group keys"
   end
-  for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "sidebar", "theme" } }) do
+  for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "sidebar", "theme" },
+    { "sidebar", "settings" } }) do
     local group, name = option[1], option[2]
     local keys = config[group][name]
     if keys then
@@ -1336,11 +1348,66 @@ end
 -- up to the edges of the screen. Any other window gets Omarchy's swap.
 local MOVE_STEP = 50
 local moves = { l = { -1, 0 }, r = { 1, 0 }, u = { 0, -1 }, d = { 0, 1 } }
+-- `floating_keys`: an ordinary floating window that the keys can place (not a
+-- sidebar, nor pinned: the Dock's windows and popped-out ones stay put).
+local function free_floating(window)
+  return config.floating_keys and window ~= nil and window.floating and not window.pinned
+    and not is_member(window) and usable_monitor(window.monitor)
+end
+
+-- Where an ordinary floating window may go: its monitor less the bar, the
+-- Dock's strips and Omarchy's outer gap, and inside its border.
+local function floating_area(m)
+  local r = m.reserved or {}
+  local g = hl.get_config("general:gaps_out")
+  local gt, gr, gb, gl = 0, 0, 0, 0
+  if type(g) == "number" then
+    gt, gr, gb, gl = g, g, g, g
+  elseif g then
+    gt, gr, gb, gl = g.top or 0, g.right or 0, g.bottom or 0, g.left or 0
+  end
+  local size = hl.get_config("general:border_size")
+  local b = type(size) == "number" and size or 0
+  local mw, mh = m.width / m.scale, m.height / m.scale
+  if (m.transform or 0) % 2 == 1 then
+    mw, mh = mh, mw
+  end
+  return {
+    left = m.x + (r.left or 0) + gl + b,
+    right = m.x + mw - (r.right or 0) - gr - b,
+    top = m.y + (r.top or 0) + gt + b,
+    bottom = m.y + mh - (r.bottom or 0) - gb - b,
+  }
+end
+
+local function put(window, width, height, x, y)
+  dispatch_for(window, hl.dsp.window.resize, { x = math.floor(width), y = math.floor(height) })
+  dispatch_for(window, hl.dsp.window.move, { x = math.floor(x), y = math.floor(y) })
+end
+
+-- SUPER + SHIFT + arrows on an ordinary floating window: against that edge.
+local function move_floating(window, direction)
+  local a = floating_area(window.monitor)
+  local x, y, w, h = window.at.x, window.at.y, window.size.x, window.size.y
+  if direction == "l" then
+    x = a.left
+  elseif direction == "r" then
+    x = a.right - w
+  elseif direction == "u" then
+    y = a.top
+  else
+    y = a.bottom - h
+  end
+  put(window, w, h, x, y)
+end
+
 local function swap(direction)
   local window = hl.get_active_window()
   if is_member(window) and window.floating then
     local m = moves[direction]
     place(window, window.size.x, window.size.y, window.at.x + m[1] * MOVE_STEP, window.at.y + m[2] * MOVE_STEP)
+  elseif free_floating(window) then
+    move_floating(window, direction)
   else
     hl.dispatch(hl.dsp.window.swap({ direction = direction }))
   end
@@ -1450,8 +1517,9 @@ end
 local before_stretch = {} -- address -> { x = { pos, size }, y = { pos, size } }
 local function stretch(direction, omarchy)
   local window = hl.get_active_window()
-  if is_member(window) and window.floating and window.monitor then
-    local a = area(window.monitor)
+  local sidebar_window = is_member(window) and window.floating and window.monitor
+  if sidebar_window or free_floating(window) then
+    local a = sidebar_window and area(window.monitor) or floating_area(window.monitor)
     local saved = before_stretch[window.address] or {}
     before_stretch[window.address] = saved
     local x, y, width, height = window.at.x, window.at.y, window.size.x, window.size.y
@@ -1478,7 +1546,11 @@ local function stretch(direction, omarchy)
         y, height = a.top, full
       end
     end
-    place(window, width, height, x, y)
+    if sidebar_window then
+      place(window, width, height, x, y)
+    else
+      put(window, width, height, x, y)
+    end
   elseif is_member(window) and window.monitor and showing(window) then
     fill()
   else
@@ -1517,7 +1589,14 @@ end
 
 local switching = false -- the switcher holds HIDE_KEY and SUPER + T while it's open
 
+local open_settings -- defined at the end, with the other plugin API
 local function bind_sidebar_keys()
+  if config.sidebar.settings then
+    hl.unbind(config.sidebar.settings)
+    o.bind(config.sidebar.settings, "Sidebar settings", guard("opening the sidebar settings", function()
+      open_settings()
+    end))
+  end
   if not switching then
     hl.unbind(FILL_KEY[1])
     o.bind(FILL_KEY[1], "Sidebar: fill the screen / back", guard("filling the screen with the sidebar", fill))
@@ -1559,7 +1638,39 @@ local function bind_sidebar_keys()
   end
 end
 
+-- With `floating_keys`, the handler for one of Omarchy's swap or group keys
+-- (SUPER + SHIFT/ALT + arrows) that also places floating windows, giving any
+-- other window Omarchy's action; nil for every other key, or without the
+-- option. The Dock plugin hands the swap keys back through this too.
+local function floating_key(keys)
+  if not config.floating_keys then
+    return nil
+  end
+  for _, s in ipairs(swap_keys) do
+    if s[1] == keys then
+      local direction = s[3]
+      return guard(s[2], function()
+        swap(direction)
+      end)
+    end
+  end
+  for _, g in ipairs(group_keys) do
+    if g[1] == keys and g[5] then
+      local direction, omarchy = g[3], g[4]
+      return guard(g[2], function()
+        stretch(direction, omarchy)
+      end)
+    end
+  end
+end
+
 local function bind_omarchy_keys()
+  if config.sidebar.settings then
+    hl.unbind(config.sidebar.settings)
+    if config.sidebar.settings == SCRATCH_KEY[1] then
+      o.bind(SCRATCH_KEY[1], SCRATCH_KEY[2], SCRATCH_KEY[3])
+    end
+  end
   if not switching then
     hl.unbind(FILL_KEY[1])
     o.bind(FILL_KEY[1], FILL_KEY[2], hl.dsp.window.float({ action = "toggle" }))
@@ -1577,11 +1688,11 @@ local function bind_omarchy_keys()
   end
   for _, s in ipairs(swap_keys) do
     hl.unbind(s[1])
-    o.bind(s[1], s[2], hl.dsp.window.swap({ direction = s[3] }))
+    o.bind(s[1], s[2], floating_key(s[1]) or hl.dsp.window.swap({ direction = s[3] }))
   end
   for _, g in ipairs(group_keys) do
     hl.unbind(g[1])
-    o.bind(g[1], g[2], g[4])
+    o.bind(g[1], g[2], floating_key(g[1]) or g[4])
   end
 end
 
@@ -2174,6 +2285,22 @@ end
 
 -- The sidebar may already have focus when this loads (e.g. after a reload).
 guard("loading", sync_keys)()
+-- `floating_keys` needs ours bound from the start, not only once a sidebar has
+-- had focus.
+if config.floating_keys and not sidebar_keys and omarchy_default_bindings ~= false then
+  guard("binding the floating window keys", function()
+    for _, k in ipairs(swap_keys) do
+      hl.unbind(k[1])
+      o.bind(k[1], k[2], floating_key(k[1]))
+    end
+    for _, g in ipairs(group_keys) do
+      if g[5] then
+        hl.unbind(g[1])
+        o.bind(g[1], g[2], floating_key(g[1]))
+      end
+    end
+  end)()
+end
 
 -- For scripting, tests and other plugins: `hyprctl eval 'sidebar.toggle()'` etc.
 sidebar = {
@@ -2283,4 +2410,38 @@ sidebar = {
   keys_taken = function()
     return sidebar_keys
   end,
+  -- For the Dock plugin, handing back Omarchy's keys: our handler for one
+  -- (with `floating_keys`), or nil for Omarchy's own.
+  floating_key = function(keys)
+    return floating_key(keys)
+  end,
 }
+
+-- Settings panel ------------------------------------------------------------------
+
+-- SUPER + ALT + S in a sidebar: SettingsPanel.qml lists the options it can
+-- flip, as they are now; bin/sidebar-settings writes a change into
+-- ~/.config/omarchy/sidebar.lua and reloads Hyprland, which loads them.
+local SETTINGS = { "drawer", "fade", "dim", "width", "margin", "rounding", "border", "border_size",
+  "border_opacity", "shadow", "click_outside", "switcher", "switcher_style", "floating_keys" }
+
+open_settings = function()
+  local parts = {}
+  for _, k in ipairs(SETTINGS) do
+    local v = config[k]
+    local text
+    if type(v) == "string" then
+      text = json_string(v)
+    elseif type(v) == "number" then
+      text = string.format("%.4g", v)
+    else
+      text = tostring(v == true)
+    end
+    parts[#parts + 1] = json_string(k) .. ":" .. text
+  end
+  local m = hl.get_active_monitor()
+  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s}}',
+    json_string(m and m.name or ""), json_string(dir .. "/bin/sidebar-settings"), table.concat(parts, ","))
+  hl.exec_cmd("omarchy-shell -q sidebar-settings open " .. quote(payload))
+end
+sidebar.settings = open_settings

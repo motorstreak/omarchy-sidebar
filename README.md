@@ -44,6 +44,7 @@ Inside a sidebar that has focus:
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
+| `Super + Alt + S` | The sidebar settings: flip the options below in a panel (`←`/`→` change one, `Esc` closes). Changes are saved into `~/.config/omarchy/sidebar.lua`, keeping your comments, and apply straight away |
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Left/Right` | Move it against that screen edge, keeping its size (remembered like a move) |
@@ -72,7 +73,7 @@ plugin is installed.
 ### Keys the plugin uses
 
 - Every key option replaces whatever was bound to that key before.
-- While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
+- While a sidebar has focus, the plugin takes over `Super + Alt + S` (move to the scratchpad), `Super + Escape` (Omarchy's
   system menu), `Super + Tab` (next workspace), and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
   swap (`Super + Shift + arrows`), focus (`Super + arrows`), float/tile (`Super + T`) and move-into-group (`Super + Alt + arrows`) keys. Everywhere else those are Omarchy's own
   bindings: they start out untouched, and after a sidebar has had focus they
@@ -103,12 +104,14 @@ return {
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
   switcher = true,       -- false: Super + Tab cycles sidebars directly, without previews
+  floating_keys = false, -- true: Super + Shift/Alt + arrows also move/stretch floating windows (see below)
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true,       -- Super + Escape hides it (false: it opens the system menu)
     cycle = true,        -- Super + Tab shows the next sidebar (false: the next workspace)
     theme = "SUPER + ALT + T", -- in a sidebar: pick a theme for that app's sidebars
+    settings = "SUPER + ALT + S", -- in a sidebar: the settings panel
   },
 }
 ```
@@ -121,6 +124,13 @@ in the file are shown as a "Sidebar" notification.
 from one sidebar to the next. Hyprland has a single animation for every special
 workspace, so the scratchpad fades too, and it replaces any `specialWorkspace`
 animation in your own Hyprland config while the plugin is enabled.
+
+`floating_keys = true` gives every floating window, not only sidebars, the
+sidebar's keys that Omarchy has no use for on a floating window:
+`Super + Shift + arrows` move it against that screen edge (keeping its size),
+and `Super + Alt + arrows` make it full width or height, and back to the edge
+the arrow points to. Tiled windows keep Omarchy's swap and group keys, and
+windows the Dock pins or Omarchy pops out (pinned) stay put.
 
 `drawer = true` (the default) slides a sidebar in from the screen edge it's
 docked against, and back out to it when it hides, so it reads as a drawer
