@@ -2498,6 +2498,10 @@ open_settings = function()
   local parts = {}
   for _, k in ipairs(SETTINGS) do
     local v = config[k]
+    -- A colour name is shown as its palette slot ("green" is "color2").
+    if k == "border" and type(v) == "string" and PALETTE[v] then
+      v = PALETTE[v]
+    end
     local text
     if type(v) == "string" then
       text = json_string(v)
