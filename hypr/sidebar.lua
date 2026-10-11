@@ -1346,38 +1346,29 @@ local function swap(direction)
   end
 end
 
--- In the sidebar the arrows snap it like a window to a screen edge or corner.
--- Full width (or height), LEFT/RIGHT (UP/DOWN) make it the left or right (top
--- or bottom) half of the usable area; any other size, it docks against that
--- edge (the top one under the bar), keeping its size, so from a corner it
--- moves to the next one. SUPER + T fills the screen again. Any other
--- window gets the key's Omarchy action (`omarchy`; by default a move into a
--- group).
--- The snap itself, from the window's place `g` ({ x, y, width, height }).
+-- In the sidebar the arrows only move it: against that screen edge (the top
+-- one under the bar), keeping its size, so from a corner it goes to the next
+-- one. (SUPER + ALT + arrows change its size.) Any other window gets the key's
+-- Omarchy action (`omarchy`; by default a move into a group).
+-- The move itself, from the window's place `g` ({ x, y, width, height }).
 local function snap(window, direction, g)
   local a = area(window.monitor)
-  local x, y, width, height = g.x, g.y, g.width, g.height
-  local full, half = a.bottom - a.top, math.floor((a.bottom - a.top) / 2)
-  local full_w, half_w = a.right - a.left, math.floor((a.right - a.left) / 2)
-  if direction == "l" or direction == "r" then
-    if width >= full_w - 1 then
-      width = half_w
-      x = direction == "l" and a.left or (a.right - half_w)
-    else
-      x = direction == "l" and a.left or (a.right - width)
-    end
-  elseif height >= full - 1 then
-    height = half
-    y = direction == "u" and a.top or (a.bottom - half)
+  local x, y = g.x, g.y
+  if direction == "l" then
+    x = a.left
+  elseif direction == "r" then
+    x = a.right - g.width
+  elseif direction == "u" then
+    y = a.top
   else
-    y = direction == "u" and a.top or (a.bottom - height)
+    y = a.bottom - g.height
   end
-  place(window, width, height, x, y)
+  place(window, g.width, g.height, x, y)
 end
 
--- A tiled sidebar (SUPER + T) fills the screen, so it snaps as a floating one
--- that fills the usable area would: floated first, then snapped once floating
--- has settled (Hyprland would put its old floating place back over ours).
+-- A tiled sidebar fills the screen, so it becomes a floating one filling the
+-- usable area: floated first, then placed once floating has settled (Hyprland
+-- would put its old floating place back over ours).
 local function dock_to(direction, omarchy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating and window.monitor then
