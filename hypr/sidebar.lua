@@ -1876,12 +1876,19 @@ do
     local name = shown
     hl.timer(guard("showing the new dim", function()
       if shown_sidebar() == name and not away[name] then
+        -- Without the show/hide animation for a moment, so it doesn't flicker:
+        -- only the dim changes.
         local focused = hl.get_active_window()
+        hl.animation({ leaf = "specialWorkspace", enabled = false })
         toggle_workspace(name, true)
         toggle_workspace(name, true)
         if focused and current(focused.address) then
           focus(current(focused.address))
         end
+        hl.timer(guard("restoring the sidebar animation", function()
+          hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint",
+            style = (config.fade or config.drawer) and "fade" or "slidevert" })
+        end), { timeout = 100, type = "oneshot" })
       end
     end), { timeout = 100, type = "oneshot" })
   end
