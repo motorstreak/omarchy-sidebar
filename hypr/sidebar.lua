@@ -1346,9 +1346,9 @@ end
 
 -- In the sidebar the arrows snap it like a window to a screen edge or corner.
 -- Full width (or height), LEFT/RIGHT (UP/DOWN) make it the left or right (top
--- or bottom) half of the usable area; half width (height) pressed the other
--- way, it grows back to full; any other size, it docks against that edge (the
--- top one under the bar), keeping its size. Any other
+-- or bottom) half of the usable area; any other size, it docks against that
+-- edge (the top one under the bar), keeping its size, so from a corner it
+-- moves to the next one. SUPER + T fills the screen again. Any other
 -- window gets the key's Omarchy action (`omarchy`; by default a move into a
 -- group).
 -- The snap itself, from the window's place `g` ({ x, y, width, height }).
@@ -1357,22 +1357,16 @@ local function snap(window, direction, g)
   local x, y, width, height = g.x, g.y, g.width, g.height
   local full, half = a.bottom - a.top, math.floor((a.bottom - a.top) / 2)
   local full_w, half_w = a.right - a.left, math.floor((a.right - a.left) / 2)
-  local at_top, at_bottom = y - a.top <= 1, a.bottom - (y + height) <= 1
-  local at_left, at_right = x - a.left <= 1, a.right - (x + width) <= 1
   if direction == "l" or direction == "r" then
     if width >= full_w - 1 then
       width = half_w
       x = direction == "l" and a.left or (a.right - half_w)
-    elseif math.abs(width - half_w) <= 2 and ((direction == "l" and at_right) or (direction == "r" and at_left)) then
-      width, x = full_w, a.left
     else
       x = direction == "l" and a.left or (a.right - width)
     end
   elseif height >= full - 1 then
     height = half
     y = direction == "u" and a.top or (a.bottom - half)
-  elseif math.abs(height - half) <= 2 and ((direction == "u" and at_bottom) or (direction == "d" and at_top)) then
-    height, y = full, a.top
   else
     y = direction == "u" and a.top or (a.bottom - height)
   end
