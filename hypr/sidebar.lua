@@ -238,6 +238,15 @@ local function apply(into, overrides, path, problems, keys)
   end
 end
 
+-- The defaults as they are before your file changes them (for the settings
+-- panel's reset).
+local pristine = {}
+for k, v in pairs(defaults) do
+  if type(v) ~= "table" then
+    pristine[k] = v
+  end
+end
+
 local config = defaults
 do
   local problems = {}
@@ -2499,8 +2508,21 @@ local SETTINGS = { "drawer", "fade", "dim", "width", "margin", "rounding", "bord
   "border_opacity", "shadow", "click_outside", "switcher", "switcher_style", "floating_keys" }
 
 open_settings = function()
-  local parts = {}
+  local function encode(v)
+    if type(v) == "string" then
+      return json_string(v)
+    elseif type(v) == "number" then
+      return string.format("%.4g", v)
+    end
+    return tostring(v == true)
+  end
+  local parts, initial = {}, {}
   for _, k in ipairs(SETTINGS) do
+    local d = pristine[k]
+    if k == "border" and type(d) == "string" and PALETTE[d] then
+      d = PALETTE[d]
+    end
+    initial[#initial + 1] = json_string(k) .. ":" .. encode(d)
     local v = config[k]
     -- A colour name is shown as its palette slot ("green" is "color2").
     if k == "border" and type(v) == "string" and PALETTE[v] then
@@ -2548,9 +2570,9 @@ open_settings = function()
   end
   local label = theme and theme:gsub("%-", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end)
   local m = hl.get_active_monitor()
-  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"colours":[%s],"theme":%s}',
+  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"defaults":{%s},"colours":[%s],"theme":%s}',
     json_string(m and m.name or ""), json_string(dir .. "/bin/sidebar-settings"), table.concat(parts, ","),
-    table.concat(options, ","), json_string(label or ""))
+    table.concat(initial, ","), table.concat(options, ","), json_string(label or ""))
   hl.exec_cmd("omarchy-shell -q sidebar-settings open " .. quote(payload))
 end
 sidebar.settings = open_settings

@@ -4,6 +4,8 @@
 # Hyprland so hypr/sidebar.lua loads them.
 #
 #   sidebar-settings set KEY VALUE [KEY VALUE ...]
+#   sidebar-settings reset     every one of them back to its default: their
+#                              lines are taken out of the file
 #
 # Only the top-level options the panel offers, with plain values (true, false,
 # a number, or a word). An option already in the file has its value replaced
@@ -16,9 +18,34 @@ file=${SIDEBAR_CONFIG:-$HOME/.config/omarchy/sidebar.lua}
 allowed=" drawer fade dim width margin rounding border border_size border_opacity shadow click_outside switcher switcher_style floating_keys "
 
 usage() {
-  echo "Usage: sidebar-settings set KEY VALUE [KEY VALUE ...]" >&2
+  echo "Usage: sidebar-settings set KEY VALUE [KEY VALUE ...] | reset" >&2
   exit 1
 }
+
+if [[ ${1:-} == reset && $# -eq 1 ]]; then
+  [[ -f $file ]] || exit 0
+  tmp=$(mktemp) || exit 1
+  trap 'rm -f "$tmp"' EXIT
+  # Lines at depth 1 that set one of them (on one line, as the panel writes
+  # them); the rest stays.
+  awk -v keys="$allowed" '
+    BEGIN { n = split(keys, list, " "); for (i = 1; i <= n; i++) if (list[i] != "") want[list[i]] = 1 }
+    {
+      code = $0
+      sub(/--.*/, "", code); gsub(/"[^"]*"/, "", code); gsub(/\047[^\047]*\047/, "", code)
+      drop = 0
+      if (depth == 1 && match($0, /^[[:space:]]*[A-Za-z_]+[[:space:]]*=/)) {
+        k = substr($0, RSTART, RLENGTH); gsub(/[[:space:]=]/, "", k)
+        if (k in want && code !~ /[{}]/) drop = 1
+      }
+      depth += gsub(/{/, "{", code) - gsub(/}/, "}", code)
+      if (!drop) print
+    }
+  ' "$file" >"$tmp" || exit 1
+  cat "$tmp" >"$file"
+  hyprctl reload >/dev/null
+  exit 0
+fi
 
 [[ ${1:-} == set && $# -ge 3 && $(($# % 2)) -eq 1 ]] || usage
 shift

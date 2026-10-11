@@ -22,6 +22,10 @@ Scope {
   property var pending: ({}) // changed, not yet saved
   property int index: 0
   property string lastColour: "accent"
+  property var defaults: ({})
+  property bool confirming: false // "Reset to defaults" pressed once
+  // The rows, then "Reset to defaults".
+  readonly property int count: rows.length + 1
 
   // A row that does nothing while the switch it needs is off.
   function enabled(row) {
@@ -53,6 +57,8 @@ Scope {
     monitor = String(p.monitor || "")
     script = String(p.script || "")
     // The switch is `border` being "none"; turned on again, the colour it had.
+    defaults = p.defaults || {}
+    confirming = false
     var v = Object.assign({}, p.values || {})
     v.border_on = v.border !== "none"
     lastColour = typeof v.border === "string" && v.border !== "none" ? v.border : "accent"
@@ -140,6 +146,31 @@ Scope {
         + (typeof v === "string" ? "'" + v + "'" : String(v)) + ")"])
   }
 
+  // Every option back to its default: shown at once (the live ones applied),
+  // and their lines taken out of the file.
+  function reset() {
+    saver.stop()
+    pending = {}
+    var v = Object.assign({}, defaults)
+    v.border_on = v.border !== "none"
+    if (v.border_on) lastColour = String(v.border)
+    values = v
+    for (var i = 0; i < live.length; i++) {
+      if (defaults[live[i]] !== undefined) apply(live[i], defaults[live[i]])
+    }
+    Quickshell.execDetached([script, "reset"])
+    confirming = false
+  }
+
+  function activate(step) {
+    if (index >= rows.length) {
+      if (confirming) reset()
+      else confirming = true
+    } else {
+      change(rows[index], step)
+    }
+  }
+
   function save() {
     saver.stop()
     var args = []
@@ -211,18 +242,19 @@ Scope {
         focus: true
 
         Keys.onPressed: function(event) {
-          var row = root.rows[root.index]
           if (event.key === Qt.Key_Escape) {
-            root.close()
+            if (root.confirming) root.confirming = false
+            else root.close()
           } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) {
             root.index = Math.max(0, root.index - 1)
+            root.confirming = false
           } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) {
-            root.index = Math.min(root.rows.length - 1, root.index + 1)
+            root.index = Math.min(root.count - 1, root.index + 1)
           } else if (event.key === Qt.Key_Left) {
-            root.change(row, -1)
+            if (root.index < root.rows.length) root.activate(-1)
           } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Space
               || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.change(row, 1)
+            root.activate(1)
           } else {
             return
           }
@@ -329,8 +361,37 @@ Scope {
               anchors.fill: parent
               onClicked: function(mouse) {
                 root.index = row.index
+                root.confirming = false
                 root.change(row.modelData, row.modelData.type !== "bool" && mouse.x < width / 2 ? -1 : 1)
               }
+            }
+          }
+        }
+
+        Rectangle {
+          readonly property bool current: root.index === root.rows.length
+          width: column.width
+          height: Math.max(Style.space(40), Style.font.body + Style.spacing.rowPaddingX * 2)
+          radius: Style.cornerRadius
+          color: current ? Color.menu.selectedBackground : "transparent"
+
+          Text {
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(14)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: root.confirming ? "Press again to reset every option above" : "Reset to defaults"
+            color: parent.current ? Color.menu.selectedText : Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.body
+            font.weight: Font.Medium
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: {
+              root.index = root.rows.length
+              root.activate(1)
             }
           }
         }

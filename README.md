@@ -44,7 +44,7 @@ Inside a sidebar that has focus:
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
-| `Super + Alt + S` | The sidebar settings: flip the options below in a panel (`←`/`→` change one, `Esc` closes). Changes are saved into `~/.config/omarchy/sidebar.lua`, keeping your comments, and apply straight away |
+| `Super + Alt + S` | The sidebar settings: flip the options below in a panel (`←`/`→` change one, `Esc` closes). Changes are saved into `~/.config/omarchy/sidebar.lua`, keeping your comments, and apply straight away. "Reset to defaults" at the bottom (press it twice) puts them all back, taking their lines out of the file |
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Left/Right` | Move it against that screen edge, keeping its size (remembered like a move) |
