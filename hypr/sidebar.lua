@@ -1288,20 +1288,40 @@ end
 -- sides (where one side meets a screen edge, the other takes the rest). With
 -- SHIFT they change its height (the top edge stays). Any other window gets
 -- Omarchy's resize (which resizes a floating window round its centre).
+-- The resize itself, from the window's place `g` ({ x, y, width, height }).
+local function resize_from(window, dx, dy, g)
+  local width = g.width + dx
+  local x = g.x
+  if window.monitor then
+    local a = area(window.monitor)
+    local at_left, at_right = x - a.left <= 1, a.right - (x + g.width) <= 1
+    if at_right and not at_left then
+      x = x + g.width - width -- against the right edge: it stays there
+    elseif not at_left or at_right then
+      x = x - math.floor(dx / 2) -- in open space, or full width: both sides
+    end
+  end
+  place(window, width, g.height + dy, x, g.y)
+end
+
+-- A tiled sidebar (SUPER + T) fills the screen: floated, it resizes as from
+-- the whole usable area (see dock_to).
 local function resize(dx, dy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating then
-    local width = window.size.x + dx
-    local x = window.at.x
-    if window.monitor then
-      local a = area(window.monitor)
-      if a.right - (x + window.size.x) <= 1 then
-        x = x + window.size.x - width -- against the right edge: it stays there
-      elseif x - a.left > 1 then
-        x = x - math.floor(dx / 2) -- in open space: both sides
+    resize_from(window, dx, dy, { x = window.at.x, y = window.at.y, width = window.size.x, height = window.size.y })
+  elseif is_member(window) and window.monitor and showing(window) then
+    local address = window.address
+    dispatch_for(window, hl.dsp.window.float, { action = "enable" })
+    hl.timer(guard("resizing the sidebar", function()
+      local now = current(address)
+      if now and members[address] and now.floating and now.monitor then
+        local a = area(now.monitor)
+        resize_from(now, dx, dy, { x = a.left, y = a.top, width = a.right - a.left, height = a.bottom - a.top })
+        style(now)
       end
-    end
-    place(window, width, window.size.y + dy, x, window.at.y)
+      sync_keys()
+    end), { timeout = 50, type = "oneshot" })
   else
     hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
   end
