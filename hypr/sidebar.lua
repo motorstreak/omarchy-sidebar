@@ -531,6 +531,18 @@ local function dim_behind(sidebar)
   end
 end
 
+-- The dim a sidebar was last shown with, kept across reloads: one that loads
+-- with another (changed in the settings panel) shows the sidebar again so
+-- Hyprland takes the new one.
+local dim_file = state_root .. "/dim-shown"
+local function note_dim()
+  local f = io.open(dim_file, "w")
+  if f then
+    f:write(string.format("%.4f\n", special_dim))
+    f:close()
+  end
+end
+
 -- The drawer (`drawer`), defined with the geometry further down: the sidebars
 -- sliding out (sidebar workspace -> token of that slide), and where each
 -- sidebar window sits while it's off its place (address -> { x, y }).
@@ -559,6 +571,7 @@ local function toggle_workspace(name, instant)
     return
   end
   dim_behind(true)
+  note_dim()
   local sliding = slide and drawer_prepare(name)
   toggle_special(name)
   if sliding then
@@ -1850,8 +1863,28 @@ do
   for _, w in ipairs(hl.get_workspace_windows(LEGACY_WORKSPACE) or {}) do
     dispatch_for(w, hl.dsp.window.move, { workspace = free_workspace(), follow = false })
     enter(w)
-  end  -- For the next sidebar to show (a sidebar already showing keeps its dim).
+  end
+  -- For the next sidebar to show. One already showing keeps the dim it showed
+  -- with: shown again, at once, if that's not today's.
   dim_behind(shown ~= nil)
+  local f = shown and io.open(dim_file, "r")
+  local shown_with = f and tonumber(f:read("l") or "")
+  if f then
+    f:close()
+  end
+  if shown and shown_with and math.abs(shown_with - special_dim) > 0.001 then
+    local name = shown
+    hl.timer(guard("showing the new dim", function()
+      if shown_sidebar() == name and not away[name] then
+        local focused = hl.get_active_window()
+        toggle_workspace(name, true)
+        toggle_workspace(name, true)
+        if focused and current(focused.address) then
+          focus(current(focused.address))
+        end
+      end
+    end), { timeout = 100, type = "oneshot" })
+  end
   -- `no_anim` as the drawer wants it (an earlier load may have left it on).
   for _, w in ipairs(sidebar_windows()) do
     if members[w.address] then
