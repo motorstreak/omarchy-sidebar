@@ -13,6 +13,9 @@ screen edges than tiled windows, have well-rounded corners, and a border in your
 theme's green so they stand out
 (`margin`, `rounding`, `border`, `border_opacity` and `border_size` in the
 config change it).
+With the [Window Style plugin](https://github.com/motorstreak/omarchy-window-style)
+installed, sidebars' border, rounding and shadow are set in its panel instead
+(its Sidebars tab), and these options are left aside.
 
 Move a sidebar to a regular workspace and it becomes an ordinary window again,
 following every normal Omarchy binding. Turn it back into a sidebar any time.
