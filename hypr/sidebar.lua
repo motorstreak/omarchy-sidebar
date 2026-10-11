@@ -1279,13 +1279,15 @@ end
 
 -- Focus-scoped keys -----------------------------------------------------------
 
--- In the sidebar: MINUS widens and EQUAL narrows it, keeping the side nearer a
--- screen edge in place; with SHIFT they change its height (the top edge stays).
--- Any other window gets Omarchy's resize.
+-- In the sidebar: EQUAL ("+") widens and MINUS narrows it, on either side,
+-- keeping the side nearer a screen edge in place; with SHIFT they change its
+-- height (the top edge stays). Omarchy's keys move a window's edge left or
+-- right instead, so which one grows a window depends on its side. Any other
+-- window gets Omarchy's resize.
 local function resize(dx, dy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating then
-    local width = window.size.x - dx
+    local width = window.size.x + dx
     local x = window.at.x
     if window.monitor then
       local a = area(window.monitor)

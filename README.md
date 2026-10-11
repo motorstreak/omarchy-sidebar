@@ -47,8 +47,8 @@ Inside a sidebar that has focus:
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Left/Right` (or `Super + Alt + Left/Right`) | Dock it to that screen edge, keeping its size (remembered like a move) |
-| `Super + Minus / Equal` | Wider / narrower, keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
-| `Super + Shift + Minus / Equal` | Shorter / taller; the top edge stays put |
+| `Super + Equal / Minus` | Wider / narrower on either side (`+` grows it, unlike Omarchy's keys, which follow the window's side), keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
+| `Super + Shift + Equal / Minus` | Taller / shorter; the top edge stays put |
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
 
 A hidden sidebar is still there: `Super + B` brings it back.
