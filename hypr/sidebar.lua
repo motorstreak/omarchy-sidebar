@@ -13,15 +13,14 @@
 --   SUPER + B        show the sidebar last shown, or hide the one showing
 --   SUPER + TAB      (a sidebar focused) the next sidebar, in the order they
 --                    were added, wrapping round; with previews while SUPER is held
---   SUPER + A        the agent sidebar: your Omarchy default coding agent
---                    (`omarchy default agent`) becomes a sidebar and shows,
---                    launched if needed; with Claude Code it also keeps saved,
---                    searchable sessions (see bin/agent-sidebar)
+--
+-- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
+-- plugin does, for its coding agent): see `sidebar.kinds` at the end.
 --
 -- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + ALT +
 -- LEFT/RIGHT dock it to that screen edge, and Omarchy's resize
 -- keys resize it from the side nearer a screen edge; where it was put is
--- remembered separately for the agent and for other windows.
+-- remembered separately for each kind and for other windows.
 --
 -- Loaded into the running Hyprland by Service.qml with SIDEBAR_DIR set to the
 -- plugin folder. Keys and options can be overridden in
@@ -135,15 +134,6 @@ local defaults = {
     -- border, and a terminal's colours
     theme = "SUPER + ALT + T",
   },
-  agent = {
-    enabled = true,
-    class = "sidebar.agent",
-    toggle = "SUPER + A",
-    new = "SUPER + SHIFT + A",
-    load = "SUPER + ALT + A",
-    reset = "SUPER + CTRL + ALT + A",
-    escape = true,
-  },
 }
 
 -- Omarchy's resize and swap keys (from default/hypr/bindings/tiling.lua). The
@@ -188,7 +178,6 @@ local SYSTEM_MENU = "omarchy-menu toggle system"
 local key_options = {
   [""] = { border = true },
   sidebar = { toggle = true, convert = true, theme = true },
-  agent = { toggle = true, new = true, load = true, reset = true },
 }
 
 -- Copies `overrides` onto `into` where the types fit the defaults (key options
@@ -198,7 +187,9 @@ local function apply(into, overrides, path, problems, keys)
   for k, v in pairs(overrides) do
     local name = path .. tostring(k)
     local current = into[k]
-    if current == nil then
+    if name == "agent" then
+      problems[#problems + 1] = "the agent's options moved to ~/.config/omarchy/agent-sidebar.lua (Agent Sidebar plugin)"
+    elseif current == nil then
       problems[#problems + 1] = "unknown option " .. name
     elseif name == "own_themes" and type(v) == "table" then
       for app, key in pairs(v) do
@@ -275,11 +266,6 @@ do
     problems[#problems + 1] = "border must be a theme colour name, a colour like \"#14B9B5\", \"none\", or false"
     config.border = "theme"
   end
-  -- Used as a terminal app id and in a window rule: keep it to a plain id.
-  if not config.agent.class:match("^[%w][%w._-]*$") then
-    problems[#problems + 1] = "agent.class must be letters, digits, '.', '_' or '-'"
-    config.agent.class = "sidebar.agent"
-  end
 
   -- Two options on one key would silently replace each other, and the keys the
   -- plugin takes over while the sidebar has focus can't be used for options.
@@ -304,11 +290,10 @@ do
   for _, k in ipairs(group_keys) do
     seen[normalise(k[1])] = "Omarchy's group keys"
   end
-  for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "agent", "toggle" },
-    { "agent", "new" }, { "agent", "load" }, { "agent", "reset" } }) do
+  for _, option in ipairs({ { "sidebar", "toggle" }, { "sidebar", "convert" }, { "sidebar", "theme" } }) do
     local group, name = option[1], option[2]
     local keys = config[group][name]
-    if keys and (group ~= "agent" or config.agent.enabled) then
+    if keys then
       local id = normalise(keys)
       if seen[id] then
         problems[#problems + 1] = group .. "." .. name .. " uses the same key as " .. seen[id]
@@ -324,24 +309,45 @@ do
   end
 end
 
-local agent_class = config.agent.enabled and config.agent.class or nil
-
 -- Loaded after your Hyprland config (and again on every reload), so this wins.
 -- Omarchy's speed and curve, with its "slidevert" style swapped for a fade.
 if config.fade or config.drawer then
   hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint", style = "fade" })
 end
 
--- The agent's windows: its class, or for Claude "<class>.<session>" (each
--- session has its own window; see bin/agent-sidebar).
-local function is_agent(window)
-  local class = agent_class ~= nil and window ~= nil and window.class
-  return class and (class == agent_class or class:sub(1, #agent_class + 1) == agent_class .. ".") or false
+-- Kinds of sidebar other plugins add (SIDEBAR_KINDS, see `sidebar.kinds`):
+-- name -> { class = "<class>", escape = bool }, matching windows whose class is
+-- that class or starts with it and a "." (the Agent Sidebar's Claude sessions
+-- are "sidebar.agent.<session>"). Their windows open straight into a sidebar,
+-- and keep a remembered place and a theme of their own. A global, so a plugin
+-- loaded before or after this one finds it.
+SIDEBAR_KINDS = SIDEBAR_KINDS or {}
+
+local function kind_of(window)
+  local class = window ~= nil and window.class
+  if not class then
+    return nil
+  end
+  for name, spec in pairs(SIDEBAR_KINDS) do
+    local c = spec.class
+    if class == c or class:sub(1, #c + 1) == c .. "." then
+      return name
+    end
+  end
 end
 
--- Escape and the remembered place are per kind: the agent, or any other window.
+-- Escape and the remembered place are per kind: an added kind, or any other
+-- window ("sidebar").
 local function kind(window)
-  return is_agent(window) and "agent" or "sidebar"
+  return kind_of(window) or "sidebar"
+end
+
+local function escapes(window)
+  local k = kind_of(window)
+  if k then
+    return SIDEBAR_KINDS[k].escape ~= false
+  end
+  return config.sidebar.escape
 end
 
 -- Windows ---------------------------------------------------------------------
@@ -566,24 +572,26 @@ end
 
 -- Remembered places -----------------------------------------------------------
 
--- Where each kind of sidebar (the agent, any other window) was last put: the
+-- Where each kind of sidebar (an added kind, any other window) was last put: the
 -- screen edge it's nearer to, its distance from that edge, and its distance
 -- from the top, all within the usable area. Kept in <kind>.side as
 -- "<side> <offset> <top>" (before 0.6 it held only the side).
 os.execute("mkdir -p " .. quote(state_root))
 
-local places = {}
-for _, k in ipairs({ "agent", "sidebar" }) do
-  places[k] = { side = "right", offset = 0, top = 0 }
+-- Read when a kind is first needed, as kinds can be added after this loads.
+local places = setmetatable({}, { __index = function(t, k)
+  local p = { side = "right", offset = 0, top = 0 }
   local f = io.open(state_root .. "/" .. k .. ".side", "r")
   if f then
     local side, offset, top = (f:read("l") or ""):match("^(%a+)%s*(%-?%d*)%s*(%-?%d*)")
     if side == "left" or side == "right" then
-      places[k] = { side = side, offset = tonumber(offset) or 0, top = tonumber(top) or 0 }
+      p = { side = side, offset = tonumber(offset) or 0, top = tonumber(top) or 0 }
     end
     f:close()
   end
-end
+  rawset(t, k, p)
+  return p
+end })
 
 local function save_place(k, place)
   local saved = places[k]
@@ -981,15 +989,16 @@ sidebar_border = border_from(theme_colors, function()
 end)
 
 -- Themes picked for sidebars (SUPER + ALT + T, bin/sidebar-theme): one per
--- app, kept in themes/<app> as an Omarchy theme's folder name. The agent's
--- windows share "agent"; any other window goes by its class.
+-- app, kept in themes/<app> as an Omarchy theme's folder name. An added kind's
+-- windows share one by its name ("agent"); any other window goes by its class.
 local themes_root = state_root .. "/themes"
 local home_dir = os.getenv("HOME") -- (`home` is the drawer's by now)
 local omarchy_path = os.getenv("OMARCHY_PATH") or "/usr/share/omarchy"
 
 local function theme_app(window)
-  if is_agent(window) then
-    return "agent"
+  local k = kind_of(window)
+  if k then
+    return k
   end
   local class = window.class or ""
   if config.own_themes[class] then
@@ -1205,7 +1214,7 @@ local function evict(window)
 end
 
 -- `opened` is true for a window that opened straight into the sidebar (the
--- agent): it has no earlier state, so it leaves as a normal tiled window.
+-- agent sidebar's): it has no earlier state, so it leaves as a normal tiled window.
 local function enter(window, opened)
   window = current(window.address) or window
   -- One window per sidebar workspace: another sidebar already in this one
@@ -1468,7 +1477,7 @@ function sync_keys()
   local visible = is_member(window) and showing(window) and not keyboard_layer_open()
 
   -- With Omarchy's bindings turned off, SUPER + ESCAPE may be yours: left alone.
-  local want_escape = visible and config[kind(window)].escape
+  local want_escape = visible and escapes(window)
   if want_escape ~= escape_bound and not switching and omarchy_default_bindings ~= false then
     if want_escape then
       hl.unbind(HIDE_KEY)
@@ -1609,8 +1618,8 @@ hl.on("workspace.special_active", guard("showing the sidebar", function()
   sync_keys()
 end))
 
--- A new window lands on whatever special workspace is on screen. Only the agent
--- belongs in the sidebar (its window rule puts it there); anything else (a
+-- A new window lands on whatever special workspace is on screen. Only an added
+-- kind belongs in the sidebar (its window rule puts it there); anything else (a
 -- dialog, a browser opened from the sidebar, a terminal opened while it had
 -- focus) goes to the regular workspace instead of replacing the sidebar.
 hl.on("window.open", guard("opening a window", function(window)
@@ -1636,7 +1645,7 @@ hl.on("window.open", guard("opening a window", function(window)
   if not in_sidebar(window) then
     return
   end
-  if is_agent(window) then
+  if kind_of(window) then
     enter(window, true)
   else
     local regular = regular_workspace(window.monitor)
@@ -1717,30 +1726,6 @@ local function read_line(path)
   local line = f:read("l")
   f:close()
   return line
-end
-
--- The current session's window (bin/agent-sidebar keeps the earlier ones
--- running, hidden). A window with the plain class is another agent's, or a
--- Claude window from before 0.14.0: current unless legacy-session says it runs
--- another session.
-local function agent_window()
-  if agent_class == nil then
-    return nil
-  end
-  local session = read_line(state_root .. "/agent/session-id") or ""
-  local legacy = read_line(state_root .. "/agent/legacy-session")
-  local own = agent_class .. "." .. session:sub(1, 8)
-  local plain
-  for _, w in ipairs(hl.get_windows()) do
-    if session ~= "" and w.class == own then
-      return w
-    elseif w.class == agent_class then
-      plain = w
-    end
-  end
-  if plain and (legacy == nil or legacy == session) then
-    return plain
-  end
 end
 
 -- Switcher ----------------------------------------------------------------------
@@ -1945,47 +1930,17 @@ local function make_sidebar(window)
   end
 end
 
--- SUPER + A: the agent sidebar. Already showing: hide it. Anywhere else
--- (hidden, on a workspace, or another sidebar showing): it becomes a sidebar
--- and shows. Not running: launch it (its window rule puts it in a sidebar).
-local launch_agent
-local function toggle_agent()
-  local window = agent_window()
-  if window == nil then
-    launch_agent()
-  elseif showing(window) then
-    toggle_workspace(window.workspace.name)
-  else
-    make_sidebar(window)
-  end
-end
-
--- The agent as the sidebar, shown and focused, without toggling.
-local function show_agent()
-  local window = agent_window()
-  if window == nil then
-    return false
-  end
-  make_sidebar(window)
-  return true
-end
-
--- The agent as the sidebar, shown, at the default size against its edge.
-local function reset_agent()
-  local window = agent_window()
-  if window == nil then
-    return false
-  end
-  -- Back to its default spot: flush against its edge from the top, forgetting
-  -- where it was moved to (the edge stays).
-  save_place("agent", { side = places.agent.side, offset = 0, top = 0 })
+-- An added kind's window (see `sidebar.kinds`) as the sidebar, at the default
+-- size against its kind's edge, forgetting where it was moved to.
+local function reset_window(window)
+  local k = kind(window)
+  save_place(k, { side = places[k].side, offset = 0, top = 0 })
   if is_member(window) then
     enter(window)
     show(window)
   else
     make_sidebar(window)
   end
-  return true
 end
 
 -- SUPER + ALT + B: the focused window becomes the sidebar, or the sidebar
@@ -2039,64 +1994,15 @@ if config.click_outside then
   })
 end
 
-if agent_class then
-  local script = dir .. "/bin/agent-sidebar"
-  local function run(command)
-    dim_behind(true) -- the agent's window rule opens it into a sidebar
-    hl.exec_cmd("SIDEBAR_AGENT_CLASS=" .. quote(agent_class) .. " " .. quote(script) .. " " .. command)
-  end
-
-  -- Escape every regex metacharacter so the class matches literally.
-  -- Matches the plain class and each Claude session's "<class>.<session>".
-  local class_pattern = "^" .. agent_class:gsub("[%^%$%(%)%.%[%]%*%+%-%?%{%}|\\]", "\\%0") .. "(\\..+)?$"
-  hl.window_rule({
-    match = { class = class_pattern },
-    float = true,
-    workspace = WORKSPACE,
-  })
-
-  -- A second press while the agent is still starting would launch a second
-  -- one (on the same session, for Claude); the script also guards this.
-  local launched_at = 0
-  launch_agent = function()
-    if os.time() - launched_at >= 5 then
-      launched_at = os.time()
-      run("launch")
-    end
-  end
-  bind(config.agent.toggle, "Agent sidebar", toggle_agent)
-  bind(config.agent.new, "New agent sidebar session", function()
-    run("new")
-  end)
-  bind(config.agent.load, "Load agent sidebar session", function()
-    run("load")
-  end)
-  bind(config.agent.reset, "Reset agent sidebar", function()
-    if not reset_agent() then
-      launch_agent()
-    end
-  end)
-else
-  launch_agent = function() end
-end
-
 -- The sidebar may already have focus when this loads (e.g. after a reload).
 guard("loading", sync_keys)()
 
--- For scripting and tests: `hyprctl eval 'sidebar.toggle("agent")'` etc.
--- "sidebar" and "agent" are accepted; other names are ignored.
+-- For scripting, tests and other plugins: `hyprctl eval 'sidebar.toggle()'` etc.
 sidebar = {
-  toggle = function(name)
-    if name == "agent" then
-      toggle_agent()
-    elseif name == "sidebar" or name == nil then
-      toggle()
-    end
+  toggle = function()
+    toggle()
   end,
-  show = function(name)
-    if name == "agent" then
-      return show_agent()
-    end
+  show = function()
     local window = last_sidebar(sidebar_list())
     if window then
       show(window)
@@ -2104,11 +2010,53 @@ sidebar = {
     end
     return false
   end,
-  reset = function(name)
-    if name == "agent" then
-      return reset_agent()
+  -- For a plugin with a kind of its own (the Agent Sidebar): its windows'
+  -- class, and whether SUPER + ESCAPE hides them. Its window rule should open
+  -- them floating on special:sidebar (`sidebar.WORKSPACE`), and they enter a
+  -- sidebar from there.
+  kinds = SIDEBAR_KINDS,
+  WORKSPACE = WORKSPACE,
+  add_kind = function(name, spec)
+    assert(type(name) == "string" and name:match("^[%w_-]+$") and name ~= "sidebar", "bad kind name")
+    assert(type(spec) == "table" and type(spec.class) == "string" and spec.class:match("^[%w][%w._-]*$"),
+      "a kind needs a plain class")
+    SIDEBAR_KINDS[name] = { class = spec.class, escape = spec.escape ~= false }
+  end,
+  -- A window by address: shown as the sidebar (hiding it if it already shows,
+  -- for toggle_window), or put back at its kind's default place. False if
+  -- there's no such window.
+  toggle_window = function(address)
+    local w = current(address)
+    if w == nil then
+      return false
     end
-    return false
+    if is_member(w) and showing(w) then
+      toggle_workspace(w.workspace.name)
+    else
+      make_sidebar(w)
+    end
+    return true
+  end,
+  show_window = function(address)
+    local w = current(address)
+    if w == nil then
+      return false
+    end
+    make_sidebar(w)
+    return true
+  end,
+  reset_window = function(address)
+    local w = current(address)
+    if w == nil then
+      return false
+    end
+    reset_window(w)
+    return true
+  end,
+  -- Raises the dim ahead of a window that is about to open into a sidebar
+  -- (settle, below, sets it for what then shows).
+  dim = function()
+    dim_behind(true)
   end,
   -- SUPER + ESCAPE, for testing without keys.
   hide = hide_shown,
@@ -2144,9 +2092,8 @@ sidebar = {
   -- The switcher's SUPER release and SUPER + ESCAPE, for testing without keys.
   commit = switcher_commit,
   cancel = switcher_close,
-  -- The dim behind a sidebar to suit what shows now. bin/agent-sidebar calls
-  -- it on exit, as starting the agent raises it ahead of a sidebar that may
-  -- never show (a cancelled menu, a failed start).
+  -- The dim behind a sidebar to suit what shows now: for after `dim`, as what
+  -- was starting may never show (a cancelled menu, a failed start).
   settle = function()
     dim_behind(sidebar_shown())
   end,

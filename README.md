@@ -2,8 +2,9 @@
 
 Turn any window into a **sidebar**: docked by the left or right screen edge,
 floating over your workspace, and shown or hidden
-with one key. One key also makes your Omarchy default coding agent a sidebar,
-with saved, searchable sessions when that agent is Claude Code.
+with one key. For your coding agent as a sidebar (with saved, searchable
+Claude Code sessions), add the
+[Agent Sidebar plugin](https://github.com/motorstreak/omarchy-agent-sidebar).
 
 You can have several sidebars, one showing at a time: `Super + B` shows or
 hides the one you used last, and `Super + Tab` (in a sidebar) cycles through
@@ -36,10 +37,6 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 |---|---|
 | `Super + Alt + B` | Make the focused window a sidebar, or a sidebar a normal window again |
 | `Super + B` | Show the sidebar you used last, or hide the one showing |
-| `Super + A` | Make the agent a sidebar and show it (launching it if needed); hide it if it's already showing |
-| `Super + Shift + A` | New agent session (Claude: asks for its name, empty keeps the date and time; or starts the session a waiting question was handed off to) |
-| `Super + Alt + A` | Pick a saved session, Claude only (type to search its prompts); a running one comes back as it was |
-| `Super + Ctrl + Alt + A` | Make the agent the sidebar at its default size, back against its edge at full height (forgets where you moved it; the edge stays) |
 
 Inside a sidebar that has focus:
 
@@ -48,13 +45,13 @@ Inside a sidebar that has focus:
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
 | `Super + Tab` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `Tab` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows the next. With one sidebar it stays |
-| `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent and other windows |
+| `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Alt + Left/Right` | Dock it to that screen edge, keeping its size (remembered like a move) |
 | `Super + Minus / Equal` | Wider / narrower, keeping the side nearer a screen edge in place (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Minus / Equal` | Shorter / taller; the top edge stays put |
 | `Super + Shift + 1…0` | Move it to a workspace as a normal window |
 
-A hidden sidebar is still there: `Super + B` (or `Super + A`) brings it back.
+A hidden sidebar is still there: `Super + B` brings it back.
 `Super + Escape` or a click outside hides whichever sidebar is showing.
 
 Plain `Escape` always reaches the app in the sidebar. While a sidebar has
@@ -71,8 +68,7 @@ plugin is installed.
 
 ### Keys the plugin uses
 
-- `Super + Shift + A` replaces Omarchy's ChatGPT key, and every key option
-  replaces whatever was bound to that key before.
+- Every key option replaces whatever was bound to that key before.
 - While a sidebar has focus, the plugin takes over `Super + Escape` (Omarchy's
   system menu), `Super + Tab` (next workspace), and Omarchy's resize (`Super + [Shift/Alt/Ctrl] + Minus/Equal`),
   swap (`Super + Shift + arrows`) and move-into-group (`Super + Alt + Left/Right`) keys. Everywhere else those are Omarchy's own
@@ -111,15 +107,6 @@ return {
     cycle = true,        -- Super + Tab shows the next sidebar (false: the next workspace)
     theme = "SUPER + ALT + T", -- in a sidebar: pick a theme for that app's sidebars
   },
-  agent = {
-    enabled = true,      -- false leaves out the agent sidebar
-    class = "sidebar.agent", -- window class of the agent's terminal
-    toggle = "SUPER + A",
-    new = "SUPER + SHIFT + A", -- false keeps Omarchy's ChatGPT key
-    load = "SUPER + ALT + A",
-    reset = "SUPER + CTRL + ALT + A",
-    escape = true,       -- Super + Escape hides it (false: it opens the system menu)
-  },
 }
 ```
 
@@ -143,8 +130,8 @@ Omarchy's vertical slide.
 ## Sidebar themes
 
 `Super + Alt + T` in a sidebar lists your installed Omarchy themes; the one you
-pick is used by every sidebar of that app (all agent sessions share one, any
-other window goes by its app), until you pick "Follow system theme" again.
+pick is used by every sidebar of that app (all the Agent Sidebar's sessions
+share one, any other window goes by its app), until you pick "Follow system theme" again.
 
 - The sidebar's border takes its colour from that theme.
 - A terminal sidebar (Foot, or any terminal running one process per window)
@@ -152,11 +139,10 @@ other window goes by its app), until you pick "Follow system theme" again.
   sets every Foot terminal's on a theme change. When it stops being a sidebar
   it goes back to the current theme's colours.
 - An app that draws its own colours (a browser, say) only gets the border.
-- Claude Code in the agent sidebar uses its "ANSI colours only" theme (light
-  or dark by the sidebar's theme), so all of it, accents included, follows the
-  terminal's colours and changes the moment you pick a theme. Its usual
-  themes, Omarchy's included, use fixed colours. Sessions started before
-  0.21.1 pick it up when relaunched.
+- Claude Code in the Agent Sidebar uses its "ANSI colours only" theme, so all
+  of it, accents included, follows the terminal's colours and changes the
+  moment you pick a theme. Its usual themes, Omarchy's included, use fixed
+  colours.
 - An app with a theme picker of its own (`own_themes`; cliamp by default)
   keeps its own colours: `Super + Alt + T` in its sidebar opens its picker
   instead (for cliamp, by pressing `T`).
@@ -164,46 +150,9 @@ other window goes by its app), until you pick "Follow system theme" again.
 The plugin adds a hook, `~/.config/omarchy/hooks/theme-set.d/omarchy-sidebar-themes`,
 so a sidebar's theme survives Omarchy theme changes.
 
-## The agent sidebar
-
-It runs your Omarchy default coding agent, set with
-`omarchy default agent <name>`. With none set, `Super + A` opens Omarchy's agent
-chooser (which starts the chosen agent in a normal window; press `Super + A`
-again for the sidebar). Agents start through Omarchy's own launcher, exactly as
-`Super + Shift + Ctrl + A` starts them; `Super + Shift + A` closes the running
-one and starts it fresh, without asking. The agent is one of your sidebars:
-`Super + Tab` cycles through it with the others.
-
-Claude Code is the exception, because Omarchy's launcher can't pass it session
-options: Claude is run directly, pinned to one session, so closing the sidebar
-and pressing `Super + A` resumes the same conversation. `Super + Shift + A` asks
-for the new session's name; leave it empty (or press Escape) to name it with
-the date and time. The session before keeps running, hidden (closed only if
-it has no message yet), and `Super + Alt + A` brings it back exactly as it was;
-each running session is also one of your sidebars for `Super + Tab`. Once they
-have a message, sessions show up in the `Super + Alt + A` menu (the newest 50;
-type to search their prompts) and in Claude's `/resume` picker; one that isn't
-running is resumed. The menu lists the sessions the sidebar started, so
-renaming one later with Claude's `/rename` keeps it there. It uses your normal Claude settings rather than the auto permission
-mode Omarchy's launcher starts Claude in.
-
-To move a new topic into its own session, Claude (or anything else) can leave
-the question waiting:
-
-```bash
-echo "How do I set the MTU on wg0?" | agent-sidebar handoff "NordVPN MTU on wg0"
-```
-
-The next `Super + Shift + A`, within an hour, offers to start a session with
-that name and the question already sent, or an empty one as usual. The script
-is at `~/.config/omarchy/plugins/sidebar/bin/agent-sidebar`.
-
 ## Requirements
 
-Omarchy with Hyprland's Lua config (tested on Hyprland 0.56). The agent
-sidebar needs a default agent installed (`omarchy default agent`). Like
-Omarchy's own agent launcher, it runs in `~/Work` if that exists, otherwise in
-your home folder (where Claude asks to trust the folder each time).
+Omarchy with Hyprland's Lua config (tested on Hyprland 0.56).
 
 ## How it works
 
@@ -211,5 +160,8 @@ Omarchy shell plugins can't ship Hyprland config, so the plugin's service loads
 `hypr/sidebar.lua` into the running Hyprland with `hyprctl eval` at start and
 after every Hyprland config reload; after a plugin update it reloads Hyprland
 once to pick up the new code. Problems are shown as a "Sidebar" notification.
-State (pinned Claude session, remembered places) lives in
+Other plugins can add a kind of sidebar of their own (a window class whose
+windows open straight into a sidebar, with their own place and theme) through
+the `SIDEBAR_KINDS` table; the Agent Sidebar plugin does. State (remembered
+places, themes) lives in
 `$XDG_STATE_HOME/omarchy-sidebar/` (normally `~/.local/state`).
