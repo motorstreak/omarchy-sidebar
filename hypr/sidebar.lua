@@ -2393,6 +2393,10 @@ sidebar = {
   swap = swap,
   dock = dock_to,
   fill = fill,
+  -- SUPER + TAB, for testing without keys.
+  cycle = function()
+    cycle()
+  end,
   stretch = stretch,
   resize = resize,
   release = release,
