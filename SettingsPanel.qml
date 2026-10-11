@@ -52,10 +52,11 @@ Scope {
     var p = JSON.parse(payload)
     monitor = String(p.monitor || "")
     script = String(p.script || "")
-    values = p.values || {}
     // The switch is `border` being "none"; turned on again, the colour it had.
-    values.border_on = values.border !== "none"
-    lastColour = typeof values.border === "string" && values.border !== "none" ? values.border : "accent"
+    var v = Object.assign({}, p.values || {})
+    v.border_on = v.border !== "none"
+    lastColour = typeof v.border === "string" && v.border !== "none" ? v.border : "accent"
+    values = v
     colours = Array.isArray(p.colours) ? p.colours : []
     theme = String(p.theme || "")
     pending = {}
