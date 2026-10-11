@@ -2516,6 +2516,34 @@ end
 sidebar.settings = open_settings
 -- The settings panel's dim, applied as it changes (it's saved to the file a
 -- moment later, and that reload then finds it already showing).
+-- The settings panel's look, applied as it changes: rounding and the border's
+-- colour, width and opacity restyle every sidebar at once. Saved to the file a
+-- moment later; that reload then loads the same.
+sidebar.set_live = function(key, value)
+  if key == "dim" then
+    return sidebar.set_dim(value)
+  elseif key == "rounding" or key == "border_size" or key == "border_opacity" then
+    value = tonumber(value)
+    if value == nil or value < 0 or (key == "border_opacity" and value > 1) then
+      return
+    end
+  elseif key == "border" then
+    if type(value) ~= "string" or not value:match("^[%a_]+$") then
+      return
+    end
+  else
+    return
+  end
+  config[key] = value
+  no_border = config.border == "none"
+  sidebar_border = border_from(theme_colors)
+  for _, w in ipairs(sidebar_windows()) do
+    if members[w.address] then
+      style(w)
+    end
+  end
+end
+
 sidebar.set_dim = function(value)
   value = tonumber(value)
   if value == nil or value < 0 or value > 1 then

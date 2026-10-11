@@ -19,6 +19,8 @@ Scope {
   property var values: ({})
   property var pending: ({}) // changed, not yet saved
   property int index: 0
+  // Applied as they change, not only once saved.
+  readonly property var live: ["dim", "rounding", "border", "border_size", "border_opacity"]
 
   readonly property var rows: [
     { key: "drawer", label: "Drawer slide", hint: "Slide in from the screen edge it's docked to", type: "bool" },
@@ -79,8 +81,11 @@ Scope {
     p[row.key] = v
     pending = p
     saver.restart()
-    // The dim shows at once; the rest once saved (Hyprland reloads).
-    if (row.key === "dim") Quickshell.execDetached(["hyprctl", "eval", "sidebar.set_dim(" + v + ")"])
+    // The dim and the sidebars' look show at once; the rest once saved
+    // (Hyprland reloads).
+    if (root.live.indexOf(row.key) >= 0)
+      Quickshell.execDetached(["hyprctl", "eval", "sidebar.set_live('" + row.key + "', "
+        + (typeof v === "string" ? "'" + v + "'" : String(v)) + ")"])
   }
 
   function save() {
