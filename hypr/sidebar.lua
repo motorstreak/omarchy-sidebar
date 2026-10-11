@@ -1037,10 +1037,17 @@ local PALETTE = {
   bright_red = "color9", bright_green = "color10", bright_yellow = "color11",
   bright_blue = "color12", bright_magenta = "color13", bright_cyan = "color14",
 }
+-- And the other way round, for themes that only name them ("color2" is
+-- "green").
+local SLOT_NAME = {}
+for name, slot in pairs(PALETTE) do
+  SLOT_NAME[slot] = name
+end
 local function colour_in(colors, name)
   local pattern = '%s*=%s*"#?(%x%x%x%x%x%x)"'
   return colors:match("\n%s*" .. name .. pattern)
     or (PALETTE[name] and colors:match("\n%s*" .. PALETTE[name] .. pattern))
+    or (SLOT_NAME[name] and colors:match("\n%s*" .. SLOT_NAME[name] .. pattern))
 end
 local function theme_colour(name)
   return colour_in(theme_colors, name)
