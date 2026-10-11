@@ -1444,8 +1444,8 @@ end
 
 -- SUPER + ALT + arrows in the sidebar: LEFT/RIGHT make it full width, UP/DOWN
 -- full height, keeping its place the other way; pressed again, it shrinks
--- back to the width (height) and place it had, or (if unknown) to the half on
--- the arrow's side. A tiled one floats and fills the screen. Any other window
+-- to the width (height) it had, or (if unknown) half, against the edge the
+-- arrow points to. A tiled one floats and fills the screen. Any other window
 -- gets the key's Omarchy action.
 local before_stretch = {} -- address -> { x = { pos, size }, y = { pos, size } }
 local function stretch(direction, omarchy)
@@ -1460,12 +1460,8 @@ local function stretch(direction, omarchy)
       if width >= full - 1 then
         local b = saved.x
         saved.x = nil
-        if b and b[2] < full - 1 then
-          x, width = b[1], b[2]
-        else
-          width = math.floor(full / 2)
-          x = direction == "l" and a.left or (a.right - width)
-        end
+        width = b and b[2] < full - 1 and b[2] or math.floor(full / 2)
+        x = direction == "l" and a.left or (a.right - width)
       else
         saved.x = { x, width }
         x, width = a.left, full
@@ -1475,12 +1471,8 @@ local function stretch(direction, omarchy)
       if height >= full - 1 then
         local b = saved.y
         saved.y = nil
-        if b and b[2] < full - 1 then
-          y, height = b[1], b[2]
-        else
-          height = math.floor(full / 2)
-          y = direction == "u" and a.top or (a.bottom - height)
-        end
+        height = b and b[2] < full - 1 and b[2] or math.floor(full / 2)
+        y = direction == "u" and a.top or (a.bottom - height)
       else
         saved.y = { y, height }
         y, height = a.top, full

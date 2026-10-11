@@ -48,7 +48,7 @@ Inside a sidebar that has focus:
 | `Super + Shift + arrows` | Move it a step that way (hold to keep moving), up to the screen edges. Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Left/Right` | Move it against that screen edge, keeping its size (remembered like a move) |
 | `Super + Up/Down` | Move it to the top (under the bar) or bottom of the screen, keeping its size; with `Super + Left/Right`, into any corner. The arrows never resize it |
-| `Super + Alt + Left/Right` / `Super + Alt + Up/Down` | Full width / full height, keeping its place the other way (from a corner, `Super + Alt + Up` gives that side's full-height half). Pressed again, it shrinks back to the size and place it had (or, if unknown, to the half on the arrow's side) |
+| `Super + Alt + Left/Right` / `Super + Alt + Up/Down` | Full width / full height, keeping its place the other way (from a corner, `Super + Alt + Up` gives that side's full-height half). Pressed again, it shrinks to the width (height) it had, or half if unknown, against the edge the arrow points to |
 | `Super + T` | Fill the screen (within the sidebar margins, below the bar), or go back to the size and place it had. It stays a floating sidebar, so `Super + Alt + arrows` and `Super + Equal / Minus` work from there (`Super + Alt + Left` gives the left half, and so on) |
 | `Super + Equal / Minus` | Wider / narrower (`+` always grows it). Docked against one screen edge, that edge stays put; anywhere else (or full width) it grows and shrinks on both sides, as Omarchy's floating windows do (`Alt` small steps, `Ctrl` big steps) |
 | `Super + Shift + Equal / Minus` | Taller / shorter; the top edge stays put |
