@@ -1452,17 +1452,50 @@ local function fill()
 end
 
 -- SUPER + ALT + arrows in the sidebar: LEFT/RIGHT make it full width, UP/DOWN
--- full height, keeping its place the other way. A tiled one floats and fills
--- the screen. Any other window gets the key's Omarchy action.
+-- full height, keeping its place the other way; pressed again, it shrinks
+-- back to the width (height) and place it had, or (if unknown) to the half on
+-- the arrow's side. A tiled one floats and fills the screen. Any other window
+-- gets the key's Omarchy action.
+local before_stretch = {} -- address -> { x = { pos, size }, y = { pos, size } }
 local function stretch(direction, omarchy)
   local window = hl.get_active_window()
   if is_member(window) and window.floating and window.monitor then
     local a = area(window.monitor)
+    local saved = before_stretch[window.address] or {}
+    before_stretch[window.address] = saved
+    local x, y, width, height = window.at.x, window.at.y, window.size.x, window.size.y
     if direction == "l" or direction == "r" then
-      place(window, a.right - a.left, window.size.y, a.left, window.at.y)
+      local full = a.right - a.left
+      if width >= full - 1 then
+        local b = saved.x
+        saved.x = nil
+        if b and b[2] < full - 1 then
+          x, width = b[1], b[2]
+        else
+          width = math.floor(full / 2)
+          x = direction == "l" and a.left or (a.right - width)
+        end
+      else
+        saved.x = { x, width }
+        x, width = a.left, full
+      end
     else
-      place(window, window.size.x, a.bottom - a.top, window.at.x, a.top)
+      local full = a.bottom - a.top
+      if height >= full - 1 then
+        local b = saved.y
+        saved.y = nil
+        if b and b[2] < full - 1 then
+          y, height = b[1], b[2]
+        else
+          height = math.floor(full / 2)
+          y = direction == "u" and a.top or (a.bottom - height)
+        end
+      else
+        saved.y = { y, height }
+        y, height = a.top, full
+      end
     end
+    place(window, width, height, x, y)
   elseif is_member(window) and window.monitor and showing(window) then
     fill()
   else
