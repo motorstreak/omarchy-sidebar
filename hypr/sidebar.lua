@@ -736,6 +736,21 @@ local function dock_default(window)
   place(window, width, a.bottom - top, x, top)
 end
 
+-- A floating sidebar left outside its usable area (off screen after a reload
+-- mid-slide, or centred on the whole monitor by Hyprland, which does that to a
+-- floating window it finds off screen when its workspace appears) goes back to
+-- its kind's remembered place. One sliding or about to is left alone.
+local function repair_place(window)
+  if window == nil or not window.floating or not usable_monitor(window.monitor) then
+    return
+  end
+  local a = area(window.monitor)
+  if window.at.x < a.left - 2 or window.at.y < a.top - 2
+      or window.at.x + window.size.x > a.right + 2 or window.at.y + window.size.y > a.bottom + 2 then
+    dock_default(window)
+  end
+end
+
 -- Defined further down; entering and leaving re-check the sidebar keys, since a
 -- new window's focus event can arrive before it has entered the sidebar (and
 -- the drawer once a sidebar has hidden).
@@ -838,6 +853,10 @@ function drawer_prepare(name)
   local monitor = hl.get_active_monitor()
   local list = {}
   for _, w in ipairs(drawer_windows(name)) do
+    if home[w.address] == nil and not sliding[w.address] then
+      repair_place(w)
+      w = current(w.address) or w
+    end
     if monitor and anim_off[w.address]
         and (docked_on[w.address] == nil or docked_on[w.address] == monitor.id) then
       place_of(w)
@@ -1837,6 +1856,7 @@ do
   for _, w in ipairs(sidebar_windows()) do
     if members[w.address] then
       set_anim(w, not (config.drawer and w.floating and not showing(w)))
+      repair_place(w)
     end
   end
   -- Forget windows that left or closed while this wasn't loaded.
