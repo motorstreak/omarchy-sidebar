@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Ui
 
 // The sidebar settings (SUPER + ALT + S in a sidebar): the options worth
 // flipping, as they are now, in the look of Omarchy's menus. Up/Down pick one,
@@ -235,16 +236,17 @@ Scope {
       onClicked: root.close()
     }
 
-    Rectangle {
+    BorderSurface {
       id: card
 
       width: Math.min(Style.space(560), panel.width - Style.gapsOut * 2)
       height: Math.min(panel.height - Style.gapsOut * 2, column.implicitHeight + Style.spacing.panelPadding * 2)
       anchors.centerIn: parent
       radius: Style.cornerRadius
-      color: Util.alpha(Color.menu.background, 0.97)
-      border.color: Color.menu.border
-      border.width: Math.max(1, Style.space(2))
+      // As Omarchy's menus: their background, border and its width from
+      // shell.toml's [menu] (the Window Style plugin's Menus tab).
+      color: Color.menu.background
+      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
