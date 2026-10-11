@@ -103,7 +103,7 @@ local defaults = {
   border = "green",
   border_size = 6, -- its width in pixels (Omarchy's windows have 2), or false for Omarchy's
   border_opacity = 1, -- 0 (clear) to 1 (solid), for a border given as a colour name or "#rrggbb"
-  shadow = false, -- true: a large, faint shadow around sidebars
+  shadow = false, -- true: a large, faint shadow around sidebars (with the Dock plugin, its glow)
   rounding = 32, -- corner radius of sidebars (Omarchy's popped-out windows have 8); 0 for square
   click_outside = true, -- clicking outside the shown sidebar hides it
   -- Fade sidebars in and out instead of Omarchy's vertical slide. Hyprland has
@@ -1177,18 +1177,24 @@ end
 
 -- Hyprland turns shadows on and off for all windows at once, and Omarchy has
 -- them off. So, if they're off: on, with a rule taking them off every window,
--- which sidebars override. Every other window looks as before. (If you have
--- shadows on, sidebars already have one.) Large and soft, but faint: on a
--- dark theme (its colors.toml says `mode = "dark"`) a black shadow barely
--- shows, so it's darker there to look as faint as on a light one. A theme
--- change reloads Hyprland, which loads this again.
+-- which sidebars override. Every other window looks as before. Large and
+-- soft, but faint: on a dark theme (its colors.toml says `mode = "dark"`) a
+-- black shadow barely shows, so it's darker there to look as faint as on a
+-- light one. If they're on already (your config, or the Dock plugin's glow,
+-- which also takes over these when it loads after this: SIDEBAR_SHADOW),
+-- sidebars just keep theirs, in that look. A theme change reloads Hyprland,
+-- which loads this again.
 local shadow_rule = false
+SIDEBAR_SHADOW = nil
 if config.shadow and hl.get_config("decoration:shadow:enabled") == false then
   local dark = theme_colors:match('\n%s*mode%s*=%s*"(%a+)"') == "dark"
   hl.config({ decoration = { shadow = {
     enabled = true, range = 60, render_power = 2, offset = { 0, 0 },
     color = dark and "rgba(00000066)" or "rgba(00000030)" } } })
   hl.window_rule({ match = { class = ".*" }, no_shadow = true })
+  shadow_rule = true
+  SIDEBAR_SHADOW = true
+elseif config.shadow then
   shadow_rule = true
 end
 
