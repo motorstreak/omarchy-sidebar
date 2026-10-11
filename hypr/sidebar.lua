@@ -1193,9 +1193,9 @@ if config.shadow and hl.get_config("decoration:shadow:enabled") == false then
 end
 
 local function style(window)
-  if shadow_rule then
-    dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = "0" })
-  end
+  -- Without `shadow`, handed back to the rules: a shadow kept on from when it
+  -- was on would show another plugin's (the Dock's glow).
+  dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = shadow_rule and "0" or "unset" })
   dispatch_for(window, hl.dsp.window.set_prop, {
     prop = "rounding", value = config.rounding > 0 and tostring(math.floor(config.rounding)) or "unset" })
   if no_border then
@@ -1215,9 +1215,7 @@ local function unstyle(window)
   -- Unlike a colour, these can be handed back to the config (and rules).
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "unset" })
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "rounding", value = "unset" })
-  if shadow_rule then
-    dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = "unset" })
-  end
+  dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = "unset" })
   set_border(window, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
   remember_restored(window.address)
 end
