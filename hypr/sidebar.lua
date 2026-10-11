@@ -2540,7 +2540,6 @@ open_settings = function()
       and not current:match("^color%d+$") then
     add(current, current)
   end
-  options[#options + 1] = '{"name":"none","label":"none","hex":""}'
   local label = theme and theme:gsub("%-", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end)
   local m = hl.get_active_monitor()
   local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"colours":[%s],"theme":%s}',

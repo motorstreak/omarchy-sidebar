@@ -21,6 +21,12 @@ Scope {
   property string theme: "" // this sidebar's own theme, if it has one
   property var pending: ({}) // changed, not yet saved
   property int index: 0
+  property string lastColour: "accent"
+
+  // A row that does nothing while the switch it needs is off.
+  function enabled(row) {
+    return !row.needs || values[row.needs] === true
+  }
   // Applied as they change, not only once saved.
   readonly property var live: ["dim", "rounding", "border", "border_size", "border_opacity"]
 
@@ -31,9 +37,10 @@ Scope {
     { key: "width", label: "Default width", hint: "A new sidebar's width, as a share of the screen", type: "number", min: 0.15, max: 0.9, step: 0.01, unit: "%", fallback: 0.33 },
     { key: "margin", label: "Margin", hint: "Gap to the screen edges and the bar", type: "number", min: 0, max: 120, step: 4, unit: "px", fallback: 32 },
     { key: "rounding", label: "Rounding", hint: "Corner radius", type: "number", min: 0, max: 50, step: 2, unit: "px", fallback: 32 },
-    { key: "border", label: "Border colour", hint: "From the theme's colours", type: "colour" },
-    { key: "border_size", label: "Border width", hint: "Omarchy's windows have 2", type: "number", min: 1, max: 20, step: 1, unit: "px", fallback: 6 },
-    { key: "border_opacity", label: "Border opacity", hint: "0 is clear, 100 solid", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 1 },
+    { key: "border_on", label: "Border", hint: "Off: no border, whatever the options below say", type: "bool" },
+    { key: "border", label: "Border colour", hint: "From the theme's colours", type: "colour", needs: "border_on" },
+    { key: "border_size", label: "Border width", hint: "Omarchy's windows have 2", type: "number", min: 1, max: 20, step: 1, unit: "px", fallback: 6, needs: "border_on" },
+    { key: "border_opacity", label: "Border opacity", hint: "0 is clear, 100 solid", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 1, needs: "border_on" },
     { key: "shadow", label: "Shadow", hint: "A large, faint shadow around sidebars", type: "bool" },
     { key: "click_outside", label: "Click outside hides", hint: "A click outside the sidebar hides it", type: "bool" },
     { key: "switcher", label: "Super + Tab previews", hint: "Live previews while Super is held", type: "bool" },
@@ -46,6 +53,9 @@ Scope {
     monitor = String(p.monitor || "")
     script = String(p.script || "")
     values = p.values || {}
+    // The switch is `border` being "none"; turned on again, the colour it had.
+    values.border_on = values.border !== "none"
+    lastColour = typeof values.border === "string" && values.border !== "none" ? values.border : "accent"
     colours = Array.isArray(p.colours) ? p.colours : []
     theme = String(p.theme || "")
     pending = {}
@@ -78,6 +88,22 @@ Scope {
   }
 
   function change(row, step) {
+    if (!enabled(row)) return
+    if (row.key === "border_on") {
+      var on = values.border_on !== true
+      var c = Object.assign({}, values)
+      c.border_on = on
+      if (!on && typeof c.border === "string" && c.border !== "none") lastColour = c.border
+      c.border = on ? lastColour : "none"
+      values = c
+      row = { key: "border" }
+      var q = Object.assign({}, pending)
+      q.border = c.border
+      pending = q
+      saver.restart()
+      apply("border", c.border)
+      return
+    }
     var v = values[row.key]
     if (row.type === "colour") {
       var at = -1
@@ -102,10 +128,14 @@ Scope {
     p[row.key] = v
     pending = p
     saver.restart()
-    // The dim and the sidebars' look show at once; the rest once saved
-    // (Hyprland reloads).
-    if (root.live.indexOf(row.key) >= 0)
-      Quickshell.execDetached(["hyprctl", "eval", "sidebar.set_live('" + row.key + "', "
+    apply(row.key, v)
+  }
+
+  // The dim and the sidebars' look show at once; the rest once saved
+  // (Hyprland reloads).
+  function apply(key, v) {
+    if (live.indexOf(key) >= 0)
+      Quickshell.execDetached(["hyprctl", "eval", "sidebar.set_live('" + key + "', "
         + (typeof v === "string" ? "'" + v + "'" : String(v)) + ")"])
   }
 
@@ -232,6 +262,7 @@ Scope {
             height: panel.rowHeight
             radius: Style.cornerRadius
             color: current ? Color.menu.selectedBackground : "transparent"
+            opacity: root.enabled(row.modelData) ? 1 : 0.4
 
             Column {
               anchors.left: parent.left
