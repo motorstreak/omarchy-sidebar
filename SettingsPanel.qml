@@ -28,7 +28,7 @@ Scope {
     return !row.needs || values[row.needs] === true
   }
   // Applied as they change, not only once saved.
-  readonly property var live: ["dim", "rounding", "border", "border_size", "border_opacity"]
+  readonly property var live: ["dim", "margin", "rounding", "border", "border_size", "border_opacity"]
 
   readonly property var rows: [
     { key: "drawer", label: "Drawer slide", hint: "Slide in from the screen edge it's docked to", type: "bool" },

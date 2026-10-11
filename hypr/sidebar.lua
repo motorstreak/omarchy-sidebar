@@ -2553,9 +2553,52 @@ sidebar.settings = open_settings
 -- The settings panel's look, applied as it changes: rounding and the border's
 -- colour, width and opacity restyle every sidebar at once. Saved to the file a
 -- moment later; that reload then loads the same.
+-- A new margin, applied to the sidebars where they are: a side against a
+-- screen edge (or the bar) stays against it at the new distance, so a
+-- full-height or full-screen one stays full; one floating in open space stays
+-- put, inside the new margins.
+local function remargin(value)
+  local before = {}
+  for _, w in ipairs(sidebar_windows()) do
+    if members[w.address] and w.floating and usable_monitor(w.monitor)
+        and not sliding[w.address] and not away[w.workspace.name] then
+      before[#before + 1] = { w = w, a = area(w.monitor) }
+    end
+  end
+  config.margin = value
+  for _, b in ipairs(before) do
+    local w, a0 = b.w, b.a
+    local a = area(w.monitor)
+    local x, y, width, height = w.at.x, w.at.y, w.size.x, w.size.y
+    local left, right = x - a0.left <= 2, a0.right - (x + width) <= 2
+    local top, bottom = y - a0.top <= 2, a0.bottom - (y + height) <= 2
+    if left and right then
+      x, width = a.left, a.right - a.left
+    elseif left then
+      x = a.left
+    elseif right then
+      x = a.right - width
+    end
+    if top and bottom then
+      y, height = a.top, a.bottom - a.top
+    elseif top then
+      y = a.top
+    elseif bottom then
+      y = a.bottom - height
+    end
+    place(w, width, height, x, y)
+  end
+end
+
 sidebar.set_live = function(key, value)
   if key == "dim" then
     return sidebar.set_dim(value)
+  elseif key == "margin" then
+    value = tonumber(value)
+    if value ~= nil and value >= 0 and value <= 200 then
+      remargin(value)
+    end
+    return
   elseif key == "rounding" or key == "border_size" or key == "border_opacity" then
     value = tonumber(value)
     if value == nil or value < 0 or (key == "border_opacity" and value > 1) then
