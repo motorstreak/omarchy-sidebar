@@ -1408,6 +1408,13 @@ end
 -- tiled sidebar floats again and fills it. Any other window gets Omarchy's
 -- float/tile toggle.
 local before_fill = {}
+-- Filling the screen isn't a place to remember: the one before is kept.
+local function place_filled(w)
+  local a, k = area(w.monitor), kind(w)
+  local keep = places[k]
+  place(w, a.right - a.left, a.bottom - a.top, a.left, a.top)
+  save_place(k, keep)
+end
 local function fill()
   local window = hl.get_active_window()
   if not (is_member(window) and window.monitor and showing(window)) then
@@ -1429,7 +1436,7 @@ local function fill()
       end
     else
       before_fill[address] = { x = w.at.x, y = w.at.y, width = w.size.x, height = w.size.y }
-      place(w, a.right - a.left, a.bottom - a.top, a.left, a.top)
+      place_filled(w)
     end
   end
   if window.floating then
@@ -1440,8 +1447,7 @@ local function fill()
       local now = current(address)
       if now and members[address] and now.floating and now.monitor then
         before_fill[address] = nil
-        local a = area(now.monitor)
-        place(now, a.right - a.left, a.bottom - a.top, a.left, a.top)
+        place_filled(now)
         style(now)
       end
       sync_keys()
