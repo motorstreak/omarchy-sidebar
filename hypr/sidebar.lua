@@ -172,6 +172,9 @@ local group_keys = {
   { "SUPER + ALT + UP", "Move window to group on top", "u", hl.dsp.window.move({ into_group = "u" }) },
   { "SUPER + ALT + DOWN", "Move window to group on bottom", "d", hl.dsp.window.move({ into_group = "d" }) },
 }
+-- Omarchy's float/tile toggle; in the sidebar it fills the screen (within the
+-- sidebar margins) and back, the sidebar staying floating.
+local FILL_KEY = { "SUPER + T", "Toggle window floating/tiling" }
 -- Omarchy's key for the next workspace; in the sidebar (with `cycle`) it shows
 -- the next sidebar.
 local CYCLE_KEY = { "SUPER + TAB", "Next workspace", "e+1" }
@@ -1400,6 +1403,52 @@ local function dock_to(direction, omarchy)
   end
 end
 
+-- SUPER + T in the sidebar: fills the usable area, or (filling it already)
+-- goes back to the size and place it had (the default ones if unknown). A
+-- tiled sidebar floats again and fills it. Any other window gets Omarchy's
+-- float/tile toggle.
+local before_fill = {}
+local function fill()
+  local window = hl.get_active_window()
+  if not (is_member(window) and window.monitor and showing(window)) then
+    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+    return
+  end
+  local address = window.address
+  local function now_fill(w)
+    local a = area(w.monitor)
+    local filled = w.at.x - a.left <= 1 and w.at.y - a.top <= 1
+      and a.right - (w.at.x + w.size.x) <= 1 and a.bottom - (w.at.y + w.size.y) <= 1
+    if filled then
+      local g = before_fill[address]
+      before_fill[address] = nil
+      if g then
+        place(w, g.width, g.height, g.x, g.y)
+      else
+        dock_default(w)
+      end
+    else
+      before_fill[address] = { x = w.at.x, y = w.at.y, width = w.size.x, height = w.size.y }
+      place(w, a.right - a.left, a.bottom - a.top, a.left, a.top)
+    end
+  end
+  if window.floating then
+    now_fill(window)
+  else
+    dispatch_for(window, hl.dsp.window.float, { action = "enable" })
+    hl.timer(guard("filling the screen with the sidebar", function()
+      local now = current(address)
+      if now and members[address] and now.floating and now.monitor then
+        before_fill[address] = nil
+        local a = area(now.monitor)
+        place(now, a.right - a.left, a.bottom - a.top, a.left, a.top)
+        style(now)
+      end
+      sync_keys()
+    end), { timeout = 50, type = "oneshot" })
+  end
+end
+
 -- Defined with the switcher further down.
 local cycle
 
@@ -1429,7 +1478,13 @@ local function pick_theme()
   hl.exec_cmd("omarchy-shell -q sidebar-theme-picker open " .. quote(payload))
 end
 
+local switching = false -- the switcher holds HIDE_KEY and SUPER + T while it's open
+
 local function bind_sidebar_keys()
+  if not switching then
+    hl.unbind(FILL_KEY[1])
+    o.bind(FILL_KEY[1], "Sidebar: fill the screen / back", guard("filling the screen with the sidebar", fill))
+  end
   if config.sidebar.theme then
     hl.unbind(config.sidebar.theme)
     o.bind(config.sidebar.theme, "Sidebar theme", guard("picking a sidebar theme", pick_theme))
@@ -1464,6 +1519,10 @@ local function bind_sidebar_keys()
 end
 
 local function bind_omarchy_keys()
+  if not switching then
+    hl.unbind(FILL_KEY[1])
+    o.bind(FILL_KEY[1], FILL_KEY[2], hl.dsp.window.float({ action = "toggle" }))
+  end
   if config.sidebar.theme then
     hl.unbind(config.sidebar.theme)
   end
@@ -1547,7 +1606,6 @@ end
 -- Omarchy's keys are left alone. (A click outside hides it through the left
 -- click binding below, which is always there.)
 local escape_bound = false
-local switching = false -- the switcher holds HIDE_KEY while it's open
 local sidebar_keys = false
 function sync_keys()
   local window = hl.get_active_window()
@@ -1870,8 +1928,8 @@ local function switcher_close()
   if omarchy_default_bindings ~= false then
     hl.unbind(HIDE_KEY)
     escape_bound = nil -- sync_keys binds HIDE_KEY afresh, whichever way it wants
-    hl.unbind(STYLE_KEY[1])
-    o.bind(STYLE_KEY[1], STYLE_KEY[2], hl.dsp.window.float({ action = "toggle" }))
+    -- SUPER + T: sync_keys binds it afresh below, for a sidebar or not.
+    sidebar_keys = nil
   end
   switcher_seq = switcher_seq + 1
   switcher_send("close", switcher_session .. " " .. switcher_seq)
