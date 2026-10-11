@@ -17,6 +17,8 @@ Scope {
   property string monitor: ""
   property string script: ""
   property var values: ({})
+  property var swatches: ({}) // border colour name -> "#rrggbb", as this sidebar shows it
+  property string theme: "" // this sidebar's own theme, if it has one
   property var pending: ({}) // changed, not yet saved
   property int index: 0
   // Applied as they change, not only once saved.
@@ -44,6 +46,8 @@ Scope {
     monitor = String(p.monitor || "")
     script = String(p.script || "")
     values = p.values || {}
+    swatches = p.swatches || {}
+    theme = String(p.theme || "")
     pending = {}
     open = true
     keys.forceActiveFocus()
@@ -216,7 +220,7 @@ Scope {
               anchors.left: parent.left
               anchors.leftMargin: Style.space(14)
               anchors.right: value.left
-              anchors.rightMargin: Style.space(12)
+              anchors.rightMargin: Style.space(40)
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(2)
 
@@ -234,13 +238,28 @@ Scope {
               Text {
                 width: parent.width
                 textFormat: Text.PlainText
-                text: row.modelData.hint
+                text: row.modelData.key === "border" && root.theme
+                  ? "From this sidebar's theme, " + root.theme : row.modelData.hint
                 color: row.current ? Color.menu.selectedText : Color.menu.text
                 opacity: 0.52
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
               }
+            }
+
+            // The border colour as this sidebar shows it.
+            Rectangle {
+              visible: row.modelData.key === "border" && color.a > 0
+              anchors.right: value.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              width: Style.space(18)
+              height: width
+              radius: width / 4
+              color: root.swatches[root.values.border] || "transparent"
+              border.color: Util.alpha(Color.menu.text, 0.3)
+              border.width: 1
             }
 
             Text {

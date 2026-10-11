@@ -2508,9 +2508,23 @@ open_settings = function()
     end
     parts[#parts + 1] = json_string(k) .. ":" .. text
   end
+  -- The border colours as this sidebar shows them: its app's theme, if it has
+  -- one (SUPER + ALT + T), else Omarchy's.
+  local window = hl.get_active_window()
+  local theme = window and is_member(window) and chosen_theme(window)
+  local colors = theme and theme_colors_of(theme) or theme_colors
+  local swatches = {}
+  for _, name in ipairs({ "green", "cyan", "blue", "magenta", "red", "yellow", "foreground", "accent", "theme" }) do
+    local hex = colour_in(colors, name == "theme" and "foreground" or name)
+    if hex then
+      swatches[#swatches + 1] = json_string(name) .. ":" .. json_string("#" .. hex)
+    end
+  end
+  local label = theme and theme:gsub("%-", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end)
   local m = hl.get_active_monitor()
-  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s}}',
-    json_string(m and m.name or ""), json_string(dir .. "/bin/sidebar-settings"), table.concat(parts, ","))
+  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"swatches":{%s},"theme":%s}',
+    json_string(m and m.name or ""), json_string(dir .. "/bin/sidebar-settings"), table.concat(parts, ","),
+    table.concat(swatches, ","), json_string(label or ""))
   hl.exec_cmd("omarchy-shell -q sidebar-settings open " .. quote(payload))
 end
 sidebar.settings = open_settings
