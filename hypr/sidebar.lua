@@ -691,7 +691,12 @@ local function margins()
   end
   -- The sidebar's own border width (positions are inside the border).
   local b = 0
-  if config.border == false or (config.border ~= "none" and not config.border_size) then
+  local ws = type(window_style) == "table" and window_style.look and window_style.look("sidebars")
+  if ws then
+    -- The Window Style plugin's border for sidebars.
+    local size = ws.border_size or hl.get_config("general:border_size")
+    b = type(size) == "number" and size or 0
+  elseif config.border == false or (config.border ~= "none" and not config.border_size) then
     local size = hl.get_config("general:border_size")
     b = type(size) == "number" and size or 0
   elseif config.border ~= "none" then
@@ -1195,7 +1200,11 @@ end
 -- which loads this again.
 local shadow_rule = false
 SIDEBAR_SHADOW = nil
-if config.shadow and hl.get_config("decoration:shadow:enabled") == false then
+-- (With the Window Style plugin, shadows are its alone.)
+local styled_elsewhere = type(window_style) == "table" and window_style.look ~= nil
+if styled_elsewhere then
+  -- nothing
+elseif config.shadow and hl.get_config("decoration:shadow:enabled") == false then
   local dark = theme_colors:match('\n%s*mode%s*=%s*"(%a+)"') == "dark"
   hl.config({ decoration = { shadow = {
     enabled = true, range = 60, render_power = 2, offset = { 0, 0 },
@@ -1207,7 +1216,34 @@ elseif config.shadow then
   shadow_rule = true
 end
 
+-- The Window Style plugin's look for sidebars, if it's installed (it then owns
+-- how sidebars look: their border, rounding and shadow, and the shadow switch
+-- for every window); nil otherwise. The colour comes from the sidebar's own
+-- theme if it has one (SUPER + ALT + T).
+local function window_look(window)
+  if type(window_style) ~= "table" or not window_style.look then
+    return nil
+  end
+  local name = window and chosen_theme(window)
+  return window_style.look("sidebars", name and theme_colors_of(name) or nil)
+end
+
 local function style(window)
+  local look = window_look(window)
+  if look then
+    local function set(prop, v)
+      dispatch_for(window, hl.dsp.window.set_prop, { prop = prop, value = v })
+    end
+    -- Explicitly off without one: sidebars float, and floating windows may
+    -- have one by rule.
+    set("no_shadow", look.shadow and "0" or "1")
+    set("rounding", look.rounding and tostring(look.rounding) or "unset")
+    set("border_size", look.border_size and tostring(look.border_size) or "unset")
+    if look.active or look.inactive then
+      set_border(window, look.active, look.inactive or look.active)
+    end
+    return
+  end
   -- Without `shadow`, handed back to the rules: a shadow kept on from when it
   -- was on would show another plugin's (the Dock's glow).
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = shadow_rule and "0" or "unset" })
