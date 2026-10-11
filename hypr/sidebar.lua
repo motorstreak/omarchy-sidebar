@@ -2613,9 +2613,11 @@ open_settings = function()
   end
   local label = theme and theme:gsub("%-", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end)
   local m = hl.get_active_monitor()
-  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"defaults":{%s},"colours":[%s],"theme":%s}',
+  -- With the Window Style plugin, the look is in its panel.
+  local styled = type(window_style) == "table" and window_style.open ~= nil
+  local payload = string.format('{"monitor":%s,"script":%s,"values":{%s},"defaults":{%s},"colours":[%s],"theme":%s,"styled":%s}',
     json_string(m and m.name or ""), json_string(dir .. "/bin/sidebar-settings"), table.concat(parts, ","),
-    table.concat(initial, ","), table.concat(options, ","), json_string(label or ""))
+    table.concat(initial, ","), table.concat(options, ","), json_string(label or ""), tostring(styled))
   hl.exec_cmd("omarchy-shell -q sidebar-settings open " .. quote(payload))
 end
 sidebar.settings = open_settings

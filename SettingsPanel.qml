@@ -24,8 +24,10 @@ Scope {
   property string lastColour: "accent"
   property var defaults: ({})
   property bool confirming: false // "Reset to defaults" pressed once
-  // The rows, then "Reset to defaults".
-  readonly property int count: rows.length + 1
+  // The rows, "Window style…" (with the Window Style plugin), then "Reset to
+  // defaults".
+  readonly property int extra: styled ? 1 : 0
+  readonly property int count: rows.length + extra + 1
 
   // A row that does nothing while the switch it needs is off.
   function enabled(row) {
@@ -34,18 +36,22 @@ Scope {
   // Applied as they change, not only once saved.
   readonly property var live: ["dim", "margin", "rounding", "border", "border_size", "border_opacity"]
 
-  readonly property var rows: [
+  // With the Window Style plugin the look rows are in its panel (the last row
+  // here opens it).
+  property bool styled: false
+  readonly property var rows: styled ? allRows.filter(function(r) { return !r.look }) : allRows
+  readonly property var allRows: [
     { key: "drawer", label: "Drawer slide", hint: "Slide in from the screen edge it's docked to", type: "bool" },
     { key: "fade", label: "Fade", hint: "Fade in and out instead of Omarchy's slide (without the drawer)", type: "bool" },
     { key: "dim", label: "Dim behind", hint: "How much the rest of the screen dims", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 0.55 },
     { key: "width", label: "Default width", hint: "A new sidebar's width, as a share of the screen", type: "number", min: 0.15, max: 0.9, step: 0.01, unit: "%", fallback: 0.33 },
     { key: "margin", label: "Margin", hint: "Gap to the screen edges and the bar", type: "number", min: 0, max: 120, step: 4, unit: "px", fallback: 32 },
-    { key: "rounding", label: "Rounding", hint: "Corner radius", type: "number", min: 0, max: 50, step: 2, unit: "px", fallback: 32 },
-    { key: "border_on", label: "Border", hint: "Off: no border, whatever the options below say", type: "bool" },
-    { key: "border", label: "Border colour", hint: "From the theme's colours", type: "colour", needs: "border_on" },
-    { key: "border_size", label: "Border width", hint: "Omarchy's windows have 2", type: "number", min: 1, max: 20, step: 1, unit: "px", fallback: 6, needs: "border_on" },
-    { key: "border_opacity", label: "Border opacity", hint: "0 is clear, 100 solid", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 1, needs: "border_on" },
-    { key: "shadow", label: "Shadow", hint: "A large, faint shadow around sidebars (with the Dock, its glow)", type: "bool" },
+    { look: true, key: "rounding", label: "Rounding", hint: "Corner radius", type: "number", min: 0, max: 50, step: 2, unit: "px", fallback: 32 },
+    { look: true, key: "border_on", label: "Border", hint: "Off: no border, whatever the options below say", type: "bool" },
+    { look: true, key: "border", label: "Border colour", hint: "From the theme's colours", type: "colour", needs: "border_on" },
+    { look: true, key: "border_size", label: "Border width", hint: "Omarchy's windows have 2", type: "number", min: 1, max: 20, step: 1, unit: "px", fallback: 6, needs: "border_on" },
+    { look: true, key: "border_opacity", label: "Border opacity", hint: "0 is clear, 100 solid", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 1, needs: "border_on" },
+    { look: true, key: "shadow", label: "Shadow", hint: "A large, faint shadow around sidebars (with the Dock, its glow)", type: "bool" },
     { key: "click_outside", label: "Click outside hides", hint: "A click outside the sidebar hides it", type: "bool" },
     { key: "switcher", label: "Super + Tab previews", hint: "Live previews while Super is held", type: "bool" },
     { key: "switcher_style", label: "Preview style", hint: "Super + T swaps them while previews show", type: "enum", options: ["cards", "coverflow"] },
@@ -58,6 +64,7 @@ Scope {
     script = String(p.script || "")
     // The switch is `border` being "none"; turned on again, the colour it had.
     defaults = p.defaults || {}
+    styled = p.styled === true
     confirming = false
     var v = Object.assign({}, p.values || {})
     v.border_on = v.border !== "none"
@@ -163,6 +170,11 @@ Scope {
   }
 
   function activate(step) {
+    if (styled && index === rows.length) {
+      close()
+      Quickshell.execDetached(["hyprctl", "eval", "window_style.open('sidebars')"])
+      return
+    }
     if (index >= rows.length) {
       if (confirming) reset()
       else confirming = true
@@ -369,7 +381,36 @@ Scope {
         }
 
         Rectangle {
+          visible: root.styled
           readonly property bool current: root.index === root.rows.length
+          width: column.width
+          height: visible ? Math.max(Style.space(40), Style.font.body + Style.spacing.rowPaddingX * 2) : 0
+          radius: Style.cornerRadius
+          color: current ? Color.menu.selectedBackground : "transparent"
+
+          Text {
+            anchors.left: parent.left
+            anchors.leftMargin: Style.space(14)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: "Window style…  (border, rounding, shadow)"
+            color: parent.current ? Color.menu.selectedText : Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.body
+            font.weight: Font.Medium
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            onClicked: {
+              root.index = root.rows.length
+              root.activate(1)
+            }
+          }
+        }
+
+        Rectangle {
+          readonly property bool current: root.index === root.rows.length + root.extra
           width: column.width
           height: Math.max(Style.space(40), Style.font.body + Style.spacing.rowPaddingX * 2)
           radius: Style.cornerRadius
@@ -390,7 +431,7 @@ Scope {
           MouseArea {
             anchors.fill: parent
             onClicked: {
-              root.index = root.rows.length
+              root.index = root.rows.length + root.extra
               root.activate(1)
             }
           }
