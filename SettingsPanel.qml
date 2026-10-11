@@ -44,9 +44,9 @@ Scope {
   readonly property var allRows: [
     { key: "drawer", label: "Drawer slide", hint: "Slide in from the screen edge it's docked to", type: "bool" },
     { key: "fade", label: "Fade", hint: "Fade in and out instead of Omarchy's slide (without the drawer)", type: "bool" },
-    { key: "dim", label: "Dim behind", hint: "How much the rest of the screen dims", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 0.55 },
+    { look: true, key: "dim", label: "Dim behind", hint: "How much the rest of the screen dims", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 0.55 },
     { key: "width", label: "Default width", hint: "A new sidebar's width, as a share of the screen", type: "number", min: 0.15, max: 0.9, step: 0.01, unit: "%", fallback: 0.33 },
-    { key: "margin", label: "Margin", hint: "Gap to the screen edges and the bar", type: "number", min: 0, max: 120, step: 4, unit: "px", fallback: 32 },
+    { look: true, key: "margin", label: "Margin", hint: "Gap to the screen edges and the bar", type: "number", min: 0, max: 120, step: 4, unit: "px", fallback: 32 },
     { look: true, key: "rounding", label: "Rounding", hint: "Corner radius", type: "number", min: 0, max: 50, step: 2, unit: "px", fallback: 32 },
     { look: true, key: "border_on", label: "Border", hint: "Off: no border, whatever the options below say", type: "bool" },
     { look: true, key: "border", label: "Border colour", hint: "From the theme's colours", type: "colour", needs: "border_on" },
@@ -395,7 +395,7 @@ Scope {
             anchors.leftMargin: Style.space(14)
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
-            text: "Window style…  (border, rounding, shadow)"
+            text: "Window style…  (border, rounding, shadow, dim, margin)"
             color: parent.current ? Color.menu.selectedText : Color.menu.text
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body

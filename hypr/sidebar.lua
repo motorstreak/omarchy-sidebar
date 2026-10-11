@@ -2706,3 +2706,33 @@ sidebar.set_dim = function(value)
     redim(shown)
   end
 end
+
+-- How much the screen dims behind a sidebar, 0 to 1 (for the Window Style
+-- plugin's Sidebars tab).
+sidebar.dim_amount = function()
+  if config.dim == true then
+    return 1 - (1 - base_dim) * 0.6
+  end
+  return type(config.dim) == "number" and config.dim or 0
+end
+
+-- The options the Window Style panel's Sidebars tab shows, as JSON.
+sidebar.style_options = function()
+  return string.format('{"dim":%.4g,"margin":%.4g}', sidebar.dim_amount(), tonumber(config.margin) or 0)
+end
+
+-- Saves an option the Window Style panel changes into ~/.config/omarchy/sidebar.lua
+-- (which reloads Hyprland); set_live shows it first.
+-- Takes key, value pairs: sidebar.save("dim", 0.6, "margin", 32).
+sidebar.save = function(...)
+  local args, pairs_ = { ... }, {}
+  for i = 1, #args - 1, 2 do
+    local key, value = args[i], tonumber(args[i + 1])
+    if value ~= nil and value >= 0 and ((key == "dim" and value <= 1) or (key == "margin" and value <= 200)) then
+      pairs_[#pairs_ + 1] = key .. " " .. tostring(value)
+    end
+  end
+  if #pairs_ > 0 then
+    hl.exec_cmd(quote(dir .. "/bin/sidebar-settings") .. " set " .. table.concat(pairs_, " "))
+  end
+end

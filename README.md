@@ -15,7 +15,9 @@ theme's green so they stand out
 config change it).
 With the [Window Style plugin](https://github.com/motorstreak/omarchy-window-style)
 installed, sidebars' border, rounding and shadow are set in its panel instead
-(its Sidebars tab), and these options are left aside.
+(its Sidebars tab), and these options are left aside. That tab also has the
+dim behind a sidebar and the margin (the same `dim` and `margin` options as
+here), so the sidebar settings show only how sidebars behave.
 
 Move a sidebar to a regular workspace and it becomes an ordinary window again,
 following every normal Omarchy binding. Turn it back into a sidebar any time.
