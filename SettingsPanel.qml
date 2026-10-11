@@ -79,6 +79,8 @@ Scope {
     p[row.key] = v
     pending = p
     saver.restart()
+    // The dim shows at once; the rest once saved (Hyprland reloads).
+    if (row.key === "dim") Quickshell.execDetached(["hyprctl", "eval", "sidebar.set_dim(" + v + ")"])
   }
 
   function save() {

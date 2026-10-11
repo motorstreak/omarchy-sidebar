@@ -607,6 +607,25 @@ local function focus(window)
   hl.dispatch(hl.dsp.focus({ window = selector(window) }))
 end
 
+-- The sidebar showing, shown again at once so Hyprland takes today's dim:
+-- without the show/hide animation for that moment, so it doesn't flicker.
+local function redim(name)
+  if shown_sidebar() ~= name or away[name] then
+    return
+  end
+  local focused = hl.get_active_window()
+  hl.animation({ leaf = "specialWorkspace", enabled = false })
+  toggle_workspace(name, true)
+  toggle_workspace(name, true)
+  if focused and current(focused.address) then
+    focus(current(focused.address))
+  end
+  hl.timer(guard("restoring the sidebar animation", function()
+    hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint",
+      style = (config.fade or config.drawer) and "fade" or "slidevert" })
+  end), { timeout = 100, type = "oneshot" })
+end
+
 -- Remembered places -----------------------------------------------------------
 
 -- Where each kind of sidebar (an added kind, any other window) was last put: the
@@ -1875,21 +1894,7 @@ do
   if shown and shown_with and math.abs(shown_with - special_dim) > 0.001 then
     local name = shown
     hl.timer(guard("showing the new dim", function()
-      if shown_sidebar() == name and not away[name] then
-        -- Without the show/hide animation for a moment, so it doesn't flicker:
-        -- only the dim changes.
-        local focused = hl.get_active_window()
-        hl.animation({ leaf = "specialWorkspace", enabled = false })
-        toggle_workspace(name, true)
-        toggle_workspace(name, true)
-        if focused and current(focused.address) then
-          focus(current(focused.address))
-        end
-        hl.timer(guard("restoring the sidebar animation", function()
-          hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint",
-            style = (config.fade or config.drawer) and "fade" or "slidevert" })
-        end), { timeout = 100, type = "oneshot" })
-      end
+      redim(name)
     end), { timeout = 100, type = "oneshot" })
   end
   -- `no_anim` as the drawer wants it (an earlier load may have left it on).
@@ -2509,3 +2514,17 @@ open_settings = function()
   hl.exec_cmd("omarchy-shell -q sidebar-settings open " .. quote(payload))
 end
 sidebar.settings = open_settings
+-- The settings panel's dim, applied as it changes (it's saved to the file a
+-- moment later, and that reload then finds it already showing).
+sidebar.set_dim = function(value)
+  value = tonumber(value)
+  if value == nil or value < 0 or value > 1 then
+    return
+  end
+  config.dim = value
+  local shown = shown_sidebar()
+  if shown then
+    dim_behind(true)
+    redim(shown)
+  end
+end
