@@ -7,6 +7,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 
 // The sidebar switcher (SUPER + TAB with two or more sidebars): live previews of
 // every sidebar in the middle of the focused screen over a dimmed backdrop,
@@ -115,7 +116,7 @@ Scope {
 
       Rectangle {
         anchors.fill: parent
-        color: Color.imagePicker.scrim
+        color: Commons.Color.imagePicker.scrim
       }
 
       // Cover flow darkens the screen further, so the covers stand out.
@@ -226,7 +227,7 @@ Scope {
 
               Rectangle {
                 anchors.fill: parent
-                color: Color.background
+                color: Commons.Color.background
               }
 
               ScreencopyView {
@@ -239,7 +240,7 @@ Scope {
 
               Rectangle {
                 anchors.fill: parent
-                color: Util.alpha(Color.background, card.chosen ? 0 : 0.42)
+                color: Util.alpha(Commons.Color.background, card.chosen ? 0 : 0.42)
               }
             }
 
@@ -249,7 +250,7 @@ Scope {
               preferredRendererType: Shape.CurveRenderer
               ShapePath {
                 fillColor: "transparent"
-                strokeColor: card.chosen ? Color.imagePicker.selectedBorder : Color.imagePicker.unselectedBorder
+                strokeColor: card.chosen ? Commons.Color.imagePicker.selectedBorder : Commons.Color.imagePicker.unselectedBorder
                 strokeWidth: card.chosen ? 3 : 1
                 startX: card.topLeft; startY: 0
                 PathLine { x: card.topRight; y: 0 }
@@ -369,7 +370,7 @@ Scope {
 
                     Rectangle {
                       anchors.fill: parent
-                      color: Color.background
+                      color: Commons.Color.background
                     }
 
                     // The window filling the card, cropped to it.
@@ -383,7 +384,7 @@ Scope {
 
                     Rectangle {
                       anchors.fill: parent
-                      color: Util.alpha(Color.background, tile.chosen ? 0 : 0.42)
+                      color: Util.alpha(Commons.Color.background, tile.chosen ? 0 : 0.42)
                       Behavior on color { ColorAnimation { duration: 280 } }
                     }
 
@@ -440,9 +441,9 @@ Scope {
         anchors.horizontalCenter: carousel.horizontalCenter
         width: Math.max(root.style === "coverflow" ? content.flowChosenWidth : content.chosenWidth, 480)
         text: content.chosenItem ? content.chosenItem.title : ""
-        color: Color.imagePicker.text
+        color: Commons.Color.imagePicker.text
         style: Text.Outline
-        styleColor: Util.alpha(Color.background, 0.7)
+        styleColor: Util.alpha(Commons.Color.background, 0.7)
         font.pixelSize: Style.font.display
         font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter

@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // The sidebar settings (SUPER + ALT + S in a sidebar): the options worth
@@ -228,7 +229,7 @@ Scope {
 
     Rectangle {
       anchors.fill: parent
-      color: Color.menu.scrim
+      color: Commons.Color.menu.scrim
     }
 
     MouseArea {
@@ -245,8 +246,8 @@ Scope {
       radius: Style.cornerRadius
       // As Omarchy's menus: their background, border and its width from
       // shell.toml's [menu] (the Window Style plugin's Menus tab).
-      color: Color.menu.background
-      borderSpec: Border.surfaceSpec("menu", "border", Color.menu.border, Math.max(1, Style.space(2)))
+      color: Commons.Color.menu.background
+      borderSpec: Border.surfaceSpec("menu", "border", Commons.Color.menu.border, Math.max(1, Style.space(2)))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
 
@@ -290,7 +291,7 @@ Scope {
           verticalAlignment: Text.AlignVCenter
           textFormat: Text.PlainText
           text: "Sidebar settings"
-          color: Color.menu.text
+          color: Commons.Color.menu.text
           opacity: 0.58
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.heading
@@ -308,7 +309,7 @@ Scope {
             width: column.width
             height: panel.rowHeight
             radius: Style.cornerRadius
-            color: current ? Color.menu.selectedBackground : "transparent"
+            color: current ? Commons.Color.menu.selectedBackground : "transparent"
             opacity: root.enabled(row.modelData) ? 1 : 0.4
 
             Column {
@@ -323,7 +324,7 @@ Scope {
                 width: parent.width
                 textFormat: Text.PlainText
                 text: row.modelData.label
-                color: row.current ? Color.menu.selectedText : Color.menu.text
+                color: row.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.body
                 font.weight: Font.Medium
@@ -335,7 +336,7 @@ Scope {
                 textFormat: Text.PlainText
                 text: row.modelData.key === "border" && root.theme
                   ? "From this sidebar's theme, " + root.theme : row.modelData.hint
-                color: row.current ? Color.menu.selectedText : Color.menu.text
+                color: row.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
                 opacity: 0.52
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.bodySmall
@@ -353,7 +354,7 @@ Scope {
               height: width
               radius: width / 4
               color: (root.colourOf(root.values.border) || {}).hex || "transparent"
-              border.color: Util.alpha(Color.menu.text, 0.3)
+              border.color: Util.alpha(Commons.Color.menu.text, 0.3)
               border.width: 1
             }
 
@@ -364,7 +365,7 @@ Scope {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: (row.modelData.type === "bool" ? "" : "‹  ") + root.shown(row.modelData) + (row.modelData.type === "bool" ? "" : "  ›")
-              color: row.current ? Color.menu.selectedText : Color.menu.text
+              color: row.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
               opacity: row.modelData.type === "bool" && root.values[row.modelData.key] !== true ? 0.5 : 1
               font.family: Style.font.menuFamily
               font.pixelSize: Style.font.body
@@ -388,7 +389,7 @@ Scope {
           width: column.width
           height: visible ? Math.max(Style.space(40), Style.font.body + Style.spacing.rowPaddingX * 2) : 0
           radius: Style.cornerRadius
-          color: current ? Color.menu.selectedBackground : "transparent"
+          color: current ? Commons.Color.menu.selectedBackground : "transparent"
 
           Text {
             anchors.left: parent.left
@@ -396,7 +397,7 @@ Scope {
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
             text: "Window style…  (border, rounding, shadow, dim, margin)"
-            color: parent.current ? Color.menu.selectedText : Color.menu.text
+            color: parent.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body
             font.weight: Font.Medium
@@ -416,7 +417,7 @@ Scope {
           width: column.width
           height: Math.max(Style.space(40), Style.font.body + Style.spacing.rowPaddingX * 2)
           radius: Style.cornerRadius
-          color: current ? Color.menu.selectedBackground : "transparent"
+          color: current ? Commons.Color.menu.selectedBackground : "transparent"
 
           Text {
             anchors.left: parent.left
@@ -424,7 +425,7 @@ Scope {
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
             text: root.confirming ? "Press again to reset every option above" : "Reset to defaults"
-            color: parent.current ? Color.menu.selectedText : Color.menu.text
+            color: parent.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body
             font.weight: Font.Medium
@@ -444,7 +445,7 @@ Scope {
           topPadding: Style.space(8)
           textFormat: Text.PlainText
           text: "↑↓ choose · ←→ change · Esc close · saved to ~/.config/omarchy/sidebar.lua"
-          color: Color.menu.text
+          color: Commons.Color.menu.text
           opacity: 0.45
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.bodySmall

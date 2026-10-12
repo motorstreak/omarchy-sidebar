@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 
 // The sidebar theme picker (SUPER + ALT + T in a sidebar): the installed
 // Omarchy themes in a list beside the sidebar, each previewed on it as it's
@@ -150,8 +151,8 @@ Scope {
         ? Math.max(Style.gapsOut, root.sidebarX - width - gap)
         : Math.min(panel.width - width - Style.gapsOut, root.sidebarX + root.sidebarWidth + gap)
       radius: Style.cornerRadius
-      color: Color.menu.background
-      border.color: Color.menu.border
+      color: Commons.Color.menu.background
+      border.color: Commons.Color.menu.border
       border.width: Math.max(1, Style.space(2))
 
       MouseArea { anchors.fill: parent; onClicked: {} }
@@ -202,7 +203,7 @@ Scope {
           width: parent.width
           textFormat: Text.PlainText
           text: root.filter ? root.filter : "Sidebar theme"
-          color: root.filter ? Color.menu.text : Util.alpha(Color.menu.text, 0.6)
+          color: root.filter ? Commons.Color.menu.text : Util.alpha(Commons.Color.menu.text, 0.6)
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.heading
           elide: Text.ElideRight
@@ -229,7 +230,7 @@ Scope {
             width: ListView.view.width
             height: Style.space(40)
             radius: Style.cornerRadius
-            color: current ? Color.menu.selectedBackground : "transparent"
+            color: current ? Commons.Color.menu.selectedBackground : "transparent"
 
             Text {
               anchors.left: parent.left
@@ -238,7 +239,7 @@ Scope {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: row.modelData.label
-              color: row.current ? Color.menu.selectedText : Color.menu.text
+              color: row.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
               font.family: Style.font.menuFamily
               font.pixelSize: Style.font.body
               elide: Text.ElideRight
@@ -252,7 +253,7 @@ Scope {
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
               text: row.modelData.slug === root.saved ? "" : ""
-              color: row.current ? Color.menu.selectedText : Color.menu.text
+              color: row.current ? Commons.Color.menu.selectedText : Commons.Color.menu.text
               font.family: Style.font.menuFamily
               font.pixelSize: Style.font.body
             }
