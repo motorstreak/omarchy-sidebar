@@ -1791,7 +1791,10 @@ local function bind_omarchy_keys()
   end
   for _, r in ipairs(resize_keys) do
     hl.unbind(r[1])
-    o.bind(r[1], r[2], hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
+    -- The Dock plugin's handler for the width keys, which also move a docked
+    -- stack's edge (for a tiled window alone beside it), else Omarchy's.
+    local docks = type(dock) == "table" and dock.resize_key and dock.resize_key(r[1])
+    o.bind(r[1], r[2], docks or hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
   end
   for _, s in ipairs(swap_keys) do
     hl.unbind(s[1])
