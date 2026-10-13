@@ -557,7 +557,7 @@ end
 -- sliding out (sidebar workspace -> token of that slide), and where each
 -- sidebar window sits while it's off its place (address -> { x, y }).
 local away, home = {}, {}
-local drawer_prepare, drawer_in, drawer_out, drawer_back, drawer_restore
+local drawer_prepare, drawer_in, drawer_out, drawer_back, drawer_restore, drawer_settle
 
 local function toggle_special(name)
   hl.dispatch(hl.dsp.workspace.toggle_special(name:sub(#"special:" + 1)))
@@ -582,6 +582,9 @@ local function toggle_workspace(name, instant)
   end
   dim_behind(true)
   note_dim()
+  if config.drawer then
+    drawer_settle(name)
+  end
   local sliding = slide and drawer_prepare(name)
   toggle_special(name)
   if sliding then
@@ -982,6 +985,19 @@ function drawer_back(name)
     if h then
       slide(w, h.x, h.y)
       home[w.address] = nil
+    end
+  end
+end
+
+-- Shown again before the last hide put its windows back in place (SUPER + B
+-- pressed quickly): back first, or Hyprland finds them off screen as the
+-- workspace appears and centres them.
+function drawer_settle(name)
+  for _, w in ipairs(drawer_windows(name)) do
+    if home[w.address] and not sliding[w.address] and not anim_off[w.address] then
+      away[name] = nil
+      drawer_restore(name)
+      return
     end
   end
 end
