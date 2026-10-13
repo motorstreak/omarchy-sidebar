@@ -1470,10 +1470,21 @@ local function resize(dx, dy)
   end
 end
 
--- `floating_keys`: an ordinary floating window that the keys can place (not a
--- sidebar, nor pinned: the Dock's windows and popped-out ones stay put).
+-- `floating_keys`: an ordinary floating window that the keys can place, popped
+-- out (SUPER + O) or not (not a sidebar, nor the Dock's windows).
+-- Omarchy's SUPER + O pop-out: floating and pinned, tagged "pop" (the Dock
+-- plugin drops the tag from a window it docks).
+local function popped(window)
+  for _, tag in ipairs(window.tags or {}) do
+    if tag:gsub("%*$", "") == "pop" then
+      return true
+    end
+  end
+  return false
+end
+
 local function free_floating(window)
-  return config.floating_keys and window ~= nil and window.floating and not window.pinned
+  return config.floating_keys and window ~= nil and window.floating and (not window.pinned or popped(window))
     and not is_member(window) and usable_monitor(window.monitor)
 end
 

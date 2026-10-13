@@ -135,8 +135,9 @@ animation in your own Hyprland config while the plugin is enabled.
 sidebar's keys that Omarchy has no use for on a floating window:
 `Super + Shift + arrows` move it against that screen edge (keeping its size),
 and `Super + Alt + arrows` make it full width or height, and back to the edge
-the arrow points to. Tiled windows keep Omarchy's swap and group keys, and
-windows the Dock pins or Omarchy pops out (pinned) stay put.
+the arrow points to. Windows popped out with Omarchy's `Super + O` count as
+floating too; the Dock's windows have keys of their own, and tiled windows keep
+Omarchy's swap keys (and, with the Dock plugin, its gather on `Super + Alt + arrows`).
 
 `drawer = true` (the default) slides a sidebar in from the screen edge it's
 docked against, and back out to it when it hides, so it reads as a drawer
