@@ -129,9 +129,10 @@ local defaults = {
   -- sidebar presses this key to open it, instead of the sidebar's picker, and
   -- the sidebar leaves their colours alone. Add yours; false drops one.
   own_themes = { ["org.omarchy.cliamp"] = "T" }, -- cliamp: T, "Choose theme"
-  -- Floating windows (not only sidebars) get the sidebar's keys that Omarchy
-  -- has no use for on them: SUPER + SHIFT + arrows move one against that
-  -- screen edge, SUPER + ALT + arrows make it full width or height and back.
+  -- Floating windows (not only sidebars, popped out ones too) get the
+  -- sidebar's keys that Omarchy has no use for on them: SUPER + SHIFT + arrows
+  -- move one against that screen edge, SUPER + ALT + arrows make it full width
+  -- or height and back, and Omarchy's resize keys keep the edges it's against.
   -- Tiled windows keep Omarchy's swap and group keys.
   floating_keys = false,
   sidebar = {
@@ -1534,6 +1535,32 @@ local function move_floating(window, direction)
   put(window, w, h, x, y)
 end
 
+-- SUPER + [SHIFT +] MINUS/EQUAL on an ordinary floating window: smaller /
+-- bigger, keeping the screen edges it's against (a pop-out in the top-right
+-- corner grows left and down); away from both edges it grows on both sides,
+-- as Hyprland's own resize does. Kept inside the area.
+local function resize_floating(window, dx, dy)
+  local a = floating_area(window.monitor)
+  local x, y, w, h = window.at.x, window.at.y, window.size.x, window.size.y
+  local at_left, at_right = x - a.left <= 2, a.right - (x + w) <= 2
+  local at_top, at_bottom = y - a.top <= 2, a.bottom - (y + h) <= 2
+  local nw = math.max(200, math.min(w + dx, a.right - a.left))
+  local nh = math.max(150, math.min(h + dy, a.bottom - a.top))
+  if at_right and not at_left then
+    x = x + w - nw
+  elseif not at_left then
+    x = x - math.floor((nw - w) / 2)
+  end
+  if at_bottom and not at_top then
+    y = y + h - nh
+  elseif not at_top then
+    y = y - math.floor((nh - h) / 2)
+  end
+  x = math.max(a.left, math.min(x, a.right - nw))
+  y = math.max(a.top, math.min(y, a.bottom - nh))
+  put(window, nw, nh, x, y)
+end
+
 local function swap(direction)
   local window = hl.get_active_window()
   if free_floating(window) then
@@ -1758,6 +1785,19 @@ local function floating_key(keys)
   if not config.floating_keys then
     return nil
   end
+  for _, r in ipairs(resize_keys) do
+    if r[1] == keys then
+      local dx, dy = r[3], r[4]
+      return guard(r[2], function()
+        local window = hl.get_active_window()
+        if free_floating(window) then
+          resize_floating(window, dx, dy)
+        else
+          hl.dispatch(hl.dsp.window.resize({ x = dx, y = dy, relative = true }))
+        end
+      end)
+    end
+  end
   for _, s in ipairs(swap_keys) do
     if s[1] == keys then
       local direction = s[3]
@@ -1803,7 +1843,7 @@ local function bind_omarchy_keys()
     -- The Dock plugin's handler for the width keys, which also move a docked
     -- stack's edge (for a tiled window alone beside it), else Omarchy's.
     local docks = type(dock) == "table" and dock.resize_key and dock.resize_key(r[1])
-    o.bind(r[1], r[2], docks or hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
+    o.bind(r[1], r[2], docks or floating_key(r[1]) or hl.dsp.window.resize({ x = r[3], y = r[4], relative = true }))
   end
   for _, s in ipairs(swap_keys) do
     hl.unbind(s[1])
@@ -2432,6 +2472,11 @@ if config.floating_keys and not sidebar_keys and omarchy_default_bindings ~= fal
         hl.unbind(g[1])
         o.bind(g[1], g[2], dock_gather_key(g[1]) or floating_key(g[1]))
       end
+    end
+    for _, r in ipairs(resize_keys) do
+      local docks = type(dock) == "table" and dock.resize_key and dock.resize_key(r[1])
+      hl.unbind(r[1])
+      o.bind(r[1], r[2], docks or floating_key(r[1]))
     end
   end)()
 end
