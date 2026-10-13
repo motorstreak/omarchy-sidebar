@@ -11,17 +11,20 @@
 --   SUPER + ALT + B  the focused window becomes a sidebar (or a sidebar
 --                    becomes a normal window again)
 --   SUPER + B        show the sidebar last shown, or hide the one showing
---   SUPER + TAB      (a sidebar focused) the next sidebar, in the order they
---                    were added, wrapping round; with previews while SUPER is held
+--   SUPER + arrows   (a sidebar focused) RIGHT/DOWN the next sidebar, in the
+--                    order they were added, wrapping round, LEFT/UP the one
+--                    before; with previews while SUPER is held
 --
 -- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
 -- plugin does, for its coding agent): see `sidebar.kinds` at the end.
 --
--- In the sidebar, SUPER + SHIFT + arrows move it in steps, SUPER + arrows snap
--- it to that screen edge or corner, SUPER + ALT + arrows make it full width or
--- height, SUPER + T fills the screen, and Omarchy's resize
--- keys resize it from the side nearer a screen edge; where it was put is
--- remembered separately for each kind and for other windows.
+-- In the sidebar, the keys do what Omarchy's do, made to fit (and as the Dock
+-- plugin's do for its windows): SUPER + SHIFT + arrows move it against that
+-- screen edge or corner, SUPER + ALT + arrows move every sidebar against that
+-- edge, SUPER + T tiles it as a normal window, SUPER + F is Omarchy's
+-- fullscreen, and Omarchy's resize keys (MINUS smaller, EQUAL bigger) resize
+-- it from the side nearer a screen edge; where it was put is remembered
+-- separately for each kind and for other windows. SUPER + TAB stays Omarchy's.
 --
 -- Loaded into the running Hyprland by Service.qml with SIDEBAR_DIR set to the
 -- plugin folder. Keys and options can be overridden in
@@ -115,7 +118,7 @@ local defaults = {
   -- short way in, so they don't show on that monitor. Hyprland's own show/hide
   -- animation becomes a fade (scratchpad too), as with `fade`.
   drawer = true,
-  -- With two or more sidebars, SUPER + TAB shows live previews of them all in
+  -- With two or more sidebars, SUPER + arrows show live previews of them all in
   -- the middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
   -- The switcher's look: "cards" (slanted, like Omarchy's background picker)
@@ -135,7 +138,7 @@ local defaults = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true, -- SUPER + ESCAPE hides it (instead of opening the system menu)
-    cycle = true, -- SUPER + TAB shows the next sidebar (instead of the next workspace)
+    cycle = true, -- SUPER + arrows show the next / previous sidebar (instead of focusing beside it)
     -- (a sidebar focused) pick an Omarchy theme for that app's sidebars: their
     -- border, and a terminal's colours
     theme = "SUPER + ALT + T",
@@ -168,9 +171,10 @@ local swap_keys = {
   { "SUPER + SHIFT + DOWN", "Swap window down", "d" },
 }
 -- Omarchy's keys for focusing the window beside it and for moving a window
--- into the group beside it; in the sidebar the first snap it to that screen
--- edge, the second (marked `stretch`) make it full width or height. Each with
--- how Omarchy binds it.
+-- into the group beside it; in the sidebar the first show the previous (LEFT,
+-- UP) or next (RIGHT, DOWN) sidebar, the second (marked `gather`) move every
+-- sidebar against that screen edge, as the Dock plugin gathers its windows on
+-- one. Each with how Omarchy binds it.
 local group_keys = {
   { "SUPER + LEFT", "Focus on left window", "l", hl.dsp.focus({ direction = "l" }) },
   { "SUPER + RIGHT", "Focus on right window", "r", hl.dsp.focus({ direction = "r" }) },
@@ -185,12 +189,9 @@ local group_keys = {
 -- settings key (by default the same) no longer has a sidebar to act on.
 local SCRATCH_KEY = { "SUPER + ALT + S", "Move window to scratchpad",
   hl.dsp.window.move({ workspace = "special:scratchpad", follow = false }) }
--- Omarchy's float/tile toggle; in the sidebar it fills the screen (within the
--- sidebar margins) and back, the sidebar staying floating.
+-- Omarchy's float/tile toggle; in the sidebar it tiles it, as a normal window
+-- (out of the sidebars), as it would a floating one.
 local FILL_KEY = { "SUPER + T", "Toggle window floating/tiling" }
--- Omarchy's key for the next workspace; in the sidebar (with `cycle`) it shows
--- the next sidebar.
-local CYCLE_KEY = { "SUPER + TAB", "Next workspace", "e+1" }
 
 -- Hides the focused sidebar. Omarchy binds it to the system menu
 -- (default/hypr/bindings/utilities.lua); that comes back whenever the sidebar
@@ -388,7 +389,7 @@ end
 -- The sidebar windows by address, so a window leaving a sidebar can be told
 -- apart from an ordinary window moving between workspaces, and whether each was
 -- floating before, to put it back that way. Each member's value is a sequence
--- number: SUPER + TAB cycles through them in the order they were added.
+-- number: SUPER + arrows cycle through them in the order they were added.
 local members = {}
 -- Also kept in a file: a Hyprland reload runs this file afresh, and a window
 -- already in a sidebar must still go back floating when it leaves.
@@ -1451,10 +1452,6 @@ local function resize(dx, dy)
   end
 end
 
--- In the sidebar: the arrows move it a step that way (repeating while held),
--- up to the edges of the screen. Any other window gets Omarchy's swap.
-local MOVE_STEP = 50
-local moves = { l = { -1, 0 }, r = { 1, 0 }, u = { 0, -1 }, d = { 0, 1 } }
 -- `floating_keys`: an ordinary floating window that the keys can place (not a
 -- sidebar, nor pinned: the Dock's windows and popped-out ones stay put).
 local function free_floating(window)
@@ -1510,20 +1507,17 @@ end
 
 local function swap(direction)
   local window = hl.get_active_window()
-  if is_member(window) and window.floating then
-    local m = moves[direction]
-    place(window, window.size.x, window.size.y, window.at.x + m[1] * MOVE_STEP, window.at.y + m[2] * MOVE_STEP)
-  elseif free_floating(window) then
+  if free_floating(window) then
     move_floating(window, direction)
   else
     hl.dispatch(hl.dsp.window.swap({ direction = direction }))
   end
 end
 
--- In the sidebar the arrows only move it: against that screen edge (the top
--- one under the bar), keeping its size, so from a corner it goes to the next
--- one. (SUPER + ALT + arrows change its size.) Any other window gets the key's
--- Omarchy action (`omarchy`; by default a move into a group).
+-- SUPER + SHIFT + arrows in the sidebar move it against that screen edge (the
+-- top one under the bar), keeping its size, so from a corner it goes to the
+-- next one. Any other window gets the key's Omarchy action (`omarchy`; by
+-- default a move into a group).
 -- The move itself, from the window's place `g` ({ x, y, width, height }).
 local function snap(window, direction, g)
   local a = area(window.monitor)
@@ -1564,55 +1558,38 @@ local function dock_to(direction, omarchy)
   end
 end
 
--- SUPER + T in the sidebar: fills the usable area, or (filling it already)
--- goes back to the size and place it had (the default ones if unknown). A
--- tiled sidebar floats again and fills it. Any other window gets Omarchy's
--- float/tile toggle.
-local before_fill = {}
--- Filling the screen isn't a place to remember: the one before is kept.
-local function place_filled(w)
-  local a, k = area(w.monitor), kind(w)
-  local keep = places[k]
-  place(w, a.right - a.left, a.bottom - a.top, a.left, a.top)
-  save_place(k, keep)
-end
-local function fill()
+-- SUPER + T in the sidebar: it tiles, as a normal window on the workspace on
+-- screen (out of the sidebars), as Omarchy's toggle tiles a floating window.
+-- Any other window gets that toggle.
+local function tile_out()
   local window = hl.get_active_window()
-  if not (is_member(window) and window.monitor and showing(window)) then
+  if not is_member(window) then
     hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
     return
   end
-  local address = window.address
-  local function now_fill(w)
-    local a = area(w.monitor)
-    local filled = w.at.x - a.left <= 1 and w.at.y - a.top <= 1
-      and a.right - (w.at.x + w.size.x) <= 1 and a.bottom - (w.at.y + w.size.y) <= 1
-    if filled then
-      local g = before_fill[address]
-      before_fill[address] = nil
-      if g then
-        place(w, g.width, g.height, g.x, g.y)
-      else
-        dock_default(w)
-      end
-    else
-      before_fill[address] = { x = w.at.x, y = w.at.y, width = w.size.x, height = w.size.y }
-      place_filled(w)
-    end
+  local regular = regular_workspace(window.monitor)
+  if regular == nil then
+    return
   end
-  if window.floating then
-    now_fill(window)
-  else
-    dispatch_for(window, hl.dsp.window.float, { action = "enable" })
-    hl.timer(guard("filling the screen with the sidebar", function()
-      local now = current(address)
-      if now and members[address] and now.floating and now.monitor then
-        before_fill[address] = nil
-        place_filled(now)
-        style(now)
-      end
-      sync_keys()
-    end), { timeout = 50, type = "oneshot" })
+  local address = window.address
+  dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name) })
+  -- After leaving, which floats it again if it floated before it came in.
+  hl.timer(guard("tiling the window", function()
+    local now = current(address)
+    if now and not members[address] and now.floating then
+      dispatch_for(now, hl.dsp.window.float, { action = "toggle" })
+    end
+  end), { timeout = 150, type = "oneshot" })
+end
+
+-- SUPER + ALT + arrows in the sidebar: every floating sidebar (shown or not)
+-- moves against that edge of its screen, keeping its size, as the Dock plugin
+-- gathers its windows on one edge.
+local function gather(direction)
+  for _, w in ipairs(sidebar_windows()) do
+    if members[w.address] and w.floating and usable_monitor(w.monitor) then
+      snap(w, direction, { x = w.at.x, y = w.at.y, width = w.size.x, height = w.size.y })
+    end
   end
 end
 
@@ -1706,17 +1683,11 @@ local function bind_sidebar_keys()
   end
   if not switching then
     hl.unbind(FILL_KEY[1])
-    o.bind(FILL_KEY[1], "Sidebar: fill the screen / back", guard("filling the screen with the sidebar", fill))
+    o.bind(FILL_KEY[1], "Sidebar: tile it as a normal window", guard("tiling the sidebar", tile_out))
   end
   if config.sidebar.theme then
     hl.unbind(config.sidebar.theme)
     o.bind(config.sidebar.theme, "Sidebar theme", guard("picking a sidebar theme", pick_theme))
-  end
-  if config.sidebar.cycle then
-    hl.unbind(CYCLE_KEY[1])
-    o.bind(CYCLE_KEY[1], "Next sidebar", guard("showing the next sidebar", function()
-      cycle()
-    end))
   end
   for _, r in ipairs(resize_keys) do
     local dx, dy = r[3], r[4]
@@ -1728,20 +1699,25 @@ local function bind_sidebar_keys()
   for _, s in ipairs(swap_keys) do
     local direction = s[3]
     hl.unbind(s[1])
-    o.bind(s[1], "Move sidebar", guard(s[2], function()
-      swap(direction)
-    end), { repeating = true })
+    o.bind(s[1], "Sidebar to the screen edge", guard(s[2], function()
+      dock_to(direction, hl.dsp.window.swap({ direction = direction }))
+    end))
   end
   for _, g in ipairs(group_keys) do
-    local direction, omarchy, stretches = g[3], g[4], g[5]
+    local direction, omarchy, gathers = g[3], g[4], g[5]
     hl.unbind(g[1])
-    o.bind(g[1], stretches and "Sidebar full width/height" or "Dock sidebar to the edge", guard(g[2], function()
-      if stretches then
-        stretch(direction, omarchy)
-      else
-        dock_to(direction, omarchy)
-      end
-    end))
+    if gathers then
+      o.bind(g[1], "All sidebars to the screen edge", guard(g[2], function()
+        gather(direction)
+      end))
+    elseif config.sidebar.cycle then
+      local step = (direction == "l" or direction == "u") and -1 or 1
+      o.bind(g[1], step < 0 and "Previous sidebar" or "Next sidebar", guard(g[2], function()
+        cycle(step)
+      end))
+    else
+      o.bind(g[1], g[2], omarchy)
+    end
   end
 end
 
@@ -1784,10 +1760,6 @@ local function bind_omarchy_keys()
   end
   if config.sidebar.theme then
     hl.unbind(config.sidebar.theme)
-  end
-  if config.sidebar.cycle then
-    hl.unbind(CYCLE_KEY[1])
-    o.bind(CYCLE_KEY[1], CYCLE_KEY[2], hl.dsp.focus({ workspace = CYCLE_KEY[3] }))
   end
   for _, r in ipairs(resize_keys) do
     hl.unbind(r[1])
@@ -2143,9 +2115,9 @@ end
 
 -- Switcher ----------------------------------------------------------------------
 
--- SUPER + TAB with two or more sidebars opens the switcher: Service.qml draws a
+-- SUPER + an arrow with two or more sidebars opens the switcher: Service.qml draws a
 -- live preview of each sidebar in the middle of the screen, one highlighted.
--- Each further TAB (SUPER still held) highlights the next; letting go of SUPER
+-- Each further arrow (SUPER still held) highlights the next or the one before; letting go of SUPER
 -- shows the highlighted one, and SUPER + ESCAPE closes it without a change.
 -- Every message carries the whole state and a sequence number, as each one is a
 -- separate process and they can arrive out of order. The numbers start again
@@ -2153,7 +2125,7 @@ end
 -- also carry an id for this load: the shell takes any message from a new one.
 --
 -- Letting go of SUPER is watched for by polling: a release binding on SUPER
--- only fires if SUPER was the last key pressed, and here TAB came after it.
+-- only fires if SUPER was the last key pressed, and here an arrow came after it.
 local SUPER_KEYS = { "Super_L", "Super_R" }
 local POLL_MS = 20
 local switcher = nil -- { windows, index, seq } while open
@@ -2296,12 +2268,13 @@ local function toggle()
   end
 end
 
--- SUPER + TAB in a sidebar: the next one in the order they were added
--- (wrapping round), or with the switcher, that's the one highlighted first. A
--- lone sidebar stays.
-function cycle()
+-- SUPER + RIGHT/DOWN in a sidebar: the next one in the order they were added
+-- (wrapping round), LEFT/UP the one before (`step` 1 or -1); with the
+-- switcher, that's the one highlighted first. A lone sidebar stays.
+function cycle(step)
+  step = step or 1
   if switcher then
-    switcher.index = switcher.index % #switcher.windows + 1
+    switcher.index = (switcher.index - 1 + step) % #switcher.windows + 1
     switcher_update()
     return
   end
@@ -2316,7 +2289,7 @@ function cycle()
       at = i
     end
   end
-  local index = at % #list + 1
+  local index = (at - 1 + step) % #list + 1
   -- The switcher closes when SUPER is let go, so it needs SUPER held now.
   if config.switcher and super_down() then
     switcher_open(list, index)
@@ -2516,10 +2489,11 @@ sidebar = {
   convert = convert,
   swap = swap,
   dock = dock_to,
-  fill = fill,
-  -- SUPER + TAB, for testing without keys.
-  cycle = function()
-    cycle()
+  tile_out = tile_out,
+  gather = gather,
+  -- SUPER + RIGHT (1) or LEFT (-1), for testing without keys.
+  cycle = function(step)
+    cycle(step)
   end,
   stretch = stretch,
   resize = resize,
