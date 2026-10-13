@@ -1765,6 +1765,14 @@ local function floating_key(keys)
   end
 end
 
+-- The Dock plugin's handler for SUPER + ALT + LEFT/RIGHT, which gathers a
+-- tiled window's workspace on that side and hands any other window back to
+-- floating_key (or Omarchy's move into a group); nil without the Dock plugin,
+-- or for another key.
+local function dock_gather_key(keys)
+  return type(dock) == "table" and dock.gather_key and dock.gather_key(keys) or nil
+end
+
 local function bind_omarchy_keys()
   if config.sidebar.settings then
     hl.unbind(config.sidebar.settings)
@@ -1792,7 +1800,7 @@ local function bind_omarchy_keys()
   end
   for _, g in ipairs(group_keys) do
     hl.unbind(g[1])
-    o.bind(g[1], g[2], floating_key(g[1]) or g[4])
+    o.bind(g[1], g[2], dock_gather_key(g[1]) or floating_key(g[1]) or g[4])
   end
 end
 
@@ -2411,7 +2419,7 @@ if config.floating_keys and not sidebar_keys and omarchy_default_bindings ~= fal
     for _, g in ipairs(group_keys) do
       if g[5] then
         hl.unbind(g[1])
-        o.bind(g[1], g[2], floating_key(g[1]))
+        o.bind(g[1], g[2], dock_gather_key(g[1]) or floating_key(g[1]))
       end
     end
   end)()
