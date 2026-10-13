@@ -660,6 +660,8 @@ local places = setmetatable({}, { __index = function(t, k)
 end })
 
 local function save_place(k, place)
+  -- Whole pixels: against the right edge the offset can come out fractional.
+  place.offset, place.top = math.floor(place.offset + 0.5), math.floor(place.top + 0.5)
   local saved = places[k]
   if saved.side == place.side and saved.offset == place.offset and saved.top == place.top then
     return
