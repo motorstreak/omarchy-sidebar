@@ -11,9 +11,13 @@
 --   SUPER + ALT + B  the focused window becomes a sidebar (or a sidebar
 --                    becomes a normal window again)
 --   SUPER + B        show the sidebar last shown, or hide the one showing
---   SUPER + arrows   (a sidebar focused) RIGHT/DOWN the next sidebar, in the
---                    order they were added, wrapping round, LEFT/UP the one
---                    before; with previews while SUPER is held
+--   SUPER + LEFT/RIGHT  between the windows and the sidebar, as between two
+--                    windows: from the last window before the screen edge
+--                    the sidebar used last is against, the arrow towards it
+--                    shows it; in it, the arrow away goes back (it hides)
+--   SUPER + UP/DOWN  (a sidebar focused) the previous / next sidebar, in the
+--                    order they were added, wrapping round; with previews
+--                    while SUPER is held
 --
 -- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
 -- plugin does, for its coding agent): see `sidebar.kinds` at the end.
@@ -118,7 +122,7 @@ local defaults = {
   -- short way in, so they don't show on that monitor. Hyprland's own show/hide
   -- animation becomes a fade (scratchpad too), as with `fade`.
   drawer = true,
-  -- With two or more sidebars, SUPER + arrows show live previews of them all in
+  -- With two or more sidebars, SUPER + UP/DOWN show live previews of them all in
   -- the middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
   -- The switcher's look: "cards" (slanted, like Omarchy's background picker)
@@ -139,7 +143,9 @@ local defaults = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true, -- SUPER + ESCAPE hides it (instead of opening the system menu)
-    cycle = true, -- SUPER + arrows show the next / previous sidebar (instead of focusing beside it)
+    -- SUPER + LEFT/RIGHT reach the sidebar from the windows and back, SUPER +
+    -- UP/DOWN (in one) the previous / next sidebar; false: Omarchy's focus keys
+    cycle = true,
     -- (a sidebar focused) pick an Omarchy theme for that app's sidebars: their
     -- border, and a terminal's colours
     theme = "SUPER + ALT + T",
@@ -1699,7 +1705,7 @@ local function stretch(direction, omarchy)
 end
 
 -- Defined with the switcher further down.
-local cycle
+local cycle, sidebar_arrow, focus_toward
 
 -- SUPER + ALT + T in a sidebar: the theme picker (ThemePicker.qml) opens beside
 -- it, previewing each theme on it as it's highlighted (bin/sidebar-theme).
@@ -1767,9 +1773,9 @@ local function bind_sidebar_keys()
         gather(direction)
       end))
     elseif config.sidebar.cycle then
-      local step = (direction == "l" or direction == "u") and -1 or 1
-      o.bind(g[1], step < 0 and "Previous sidebar" or "Next sidebar", guard(g[2], function()
-        cycle(step)
+      local what = ({ u = "Previous sidebar", d = "Next sidebar" })[direction] or "Back to the windows"
+      o.bind(g[1], what, guard(g[2], function()
+        sidebar_arrow(direction)
       end))
     else
       o.bind(g[1], g[2], omarchy)
@@ -1824,6 +1830,24 @@ local function dock_gather_key(keys)
   return type(dock) == "table" and dock.gather_key and dock.gather_key(keys) or nil
 end
 
+-- With `cycle`, the handler for one of Omarchy's focus keys (SUPER + arrows) on
+-- any window but a sidebar: Omarchy's focus, or the sidebar against the screen
+-- edge that way (focus_toward). Nil for any other key, or without the option.
+-- The Dock plugin hands the keys back through this too.
+local function focus_key(keys)
+  if not config.sidebar.cycle then
+    return nil
+  end
+  for _, g in ipairs(group_keys) do
+    if g[1] == keys and not g[5] then
+      local direction = g[3]
+      return guard(g[2], function()
+        focus_toward(direction)
+      end)
+    end
+  end
+end
+
 local function bind_omarchy_keys()
   if config.sidebar.settings then
     hl.unbind(config.sidebar.settings)
@@ -1851,7 +1875,7 @@ local function bind_omarchy_keys()
   end
   for _, g in ipairs(group_keys) do
     hl.unbind(g[1])
-    o.bind(g[1], g[2], dock_gather_key(g[1]) or floating_key(g[1]) or g[4])
+    o.bind(g[1], g[2], dock_gather_key(g[1]) or focus_key(g[1]) or floating_key(g[1]) or g[4])
   end
 end
 
@@ -2171,6 +2195,12 @@ local function last_sidebar(list)
   return list[1]
 end
 
+-- The screen edge a sidebar is against: "left" or "right" (by its middle).
+local function side_of(window)
+  local a = area(window.monitor)
+  return window.at.x + window.size.x / 2 < (a.left + a.right) / 2 and "left" or "right"
+end
+
 -- Shows the window's sidebar (hiding any other) and focuses it.
 local function show(window)
   if shown_sidebar() ~= window.workspace.name then
@@ -2375,6 +2405,50 @@ function cycle(step)
   end
 end
 
+-- SUPER + arrows in a sidebar: UP / DOWN the previous / next sidebar (cycle);
+-- the arrow pointing away from its screen edge goes back to the windows (it
+-- hides, as on a click outside), the other does nothing.
+function sidebar_arrow(direction)
+  if direction == "u" or direction == "d" then
+    cycle(direction == "u" and -1 or 1)
+    return
+  end
+  local window = hl.get_active_window()
+  if switcher or not is_member(window) or window.monitor == nil then
+    return
+  end
+  local side = side_of(window)
+  if (direction == "l" and side == "right") or (direction == "r" and side == "left") then
+    hide_shown()
+  end
+end
+
+-- SUPER + arrows on any other window: Omarchy's focus. With no window that way
+-- (it's the last before the screen edge), the sidebar used last shows, if it's
+-- against that edge: it's reached as a window beside it would be.
+function focus_toward(direction)
+  local before = hl.get_active_window()
+  hl.dispatch(hl.dsp.focus({ direction = direction }))
+  if direction ~= "l" and direction ~= "r" then
+    return
+  end
+  local was = before and before.address
+  hl.timer(guard("showing the sidebar", function()
+    local now = hl.get_active_window()
+    if (now and now.address) ~= was or shown_sidebar() then
+      return
+    end
+    local list = sidebar_list()
+    if #list == 0 then
+      return
+    end
+    local w = last_sidebar(list)
+    if w.monitor and side_of(w) == (direction == "l" and "left" or "right") then
+      show(w)
+    end
+  end), { timeout = 15, type = "oneshot" })
+end
+
 -- Makes the window a sidebar and shows it. A window that isn't one yet moves to
 -- a sidebar workspace of its own (following it shows it).
 local function make_sidebar(window)
@@ -2477,6 +2551,19 @@ if config.floating_keys and not sidebar_keys and omarchy_default_bindings ~= fal
       local docks = type(dock) == "table" and dock.resize_key and dock.resize_key(r[1])
       hl.unbind(r[1])
       o.bind(r[1], r[2], docks or floating_key(r[1]))
+    end
+  end)()
+end
+
+-- `cycle`: the focus keys reach a sidebar from the start, not only once one has
+-- had focus.
+if config.sidebar.cycle and not sidebar_keys and omarchy_default_bindings ~= false then
+  guard("binding the focus keys", function()
+    for _, g in ipairs(group_keys) do
+      if not g[5] then
+        hl.unbind(g[1])
+        o.bind(g[1], g[2], focus_key(g[1]))
+      end
     end
   end)()
 end
@@ -2597,7 +2684,7 @@ sidebar = {
   -- For the Dock plugin, handing back Omarchy's keys: our handler for one
   -- (with `floating_keys`), or nil for Omarchy's own.
   floating_key = function(keys)
-    return floating_key(keys)
+    return focus_key(keys) or floating_key(keys)
   end,
 }
 
