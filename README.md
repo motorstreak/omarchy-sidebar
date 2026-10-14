@@ -6,10 +6,10 @@ with one key. For your coding agent as a sidebar (with saved, searchable
 Claude Code sessions), add the
 [Agent Sidebar plugin](https://github.com/motorstreak/omarchy-agent-sidebar).
 
-You can have several sidebars, one showing at a time: `Super + B` shows or
-hides the one you used last. `Super + Left/Right` move between your windows
-and the sidebar as between two windows, and `Super + Up/Down` (in a sidebar)
-cycle through them, each replacing the one before. Sidebars keep a wider gap from the
+You can have several sidebars, one showing at a time: `Super + B` shows the
+one you used last, and pressed again cycles through them, each
+replacing the one before. `Super + Left/Right` move between your windows and
+the sidebar as between two windows. Sidebars keep a wider gap from the
 screen edges than tiled windows, have well-rounded corners, and a border in your
 theme's green so they stand out
 (`margin`, `rounding`, `border`, `border_opacity` and `border_size` in the
@@ -42,7 +42,7 @@ away. Its saved state in `~/.local/state/omarchy-sidebar/` is left in place.
 | Key | Action |
 |---|---|
 | `Super + Alt + B` | Make the focused window a sidebar, or a sidebar a normal window again |
-| `Super + B` | Show the sidebar you used last, or hide the one showing |
+| `Super + B` | Show the sidebar you used last; with one showing, the next one (see below) |
 
 Inside a sidebar that has focus (the keys do what Omarchy's do on a window,
 made to fit, and what the [Dock plugin](https://github.com/motorstreak/omarchy-dock)'s
@@ -54,7 +54,7 @@ do on a docked window):
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
 | `Super + Alt + S` | The sidebar settings: flip the options below in a panel (`←`/`→` change one, `Esc` closes). Changes are saved into `~/.config/omarchy/sidebar.lua`, keeping your comments, and apply straight away. "Reset to defaults" at the bottom (press it twice) puts them all back, taking their lines out of the file |
 | `Super + Left/Right` | Back to the windows with the arrow pointing away from the sidebar's screen edge (it hides). From the windows, the arrow towards a sidebar's edge, on the last window before it, shows it: the sidebar is reached as a window beside would be |
-| `Super + Down` / `Super + Up` | The next / previous sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press the arrows again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows it. With one sidebar it stays |
+| `Super + B` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `B` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows it. With one sidebar, it hides |
 | `Super + Shift + arrows` | Move it against that screen edge, keeping its size; from there, the next arrow takes it into a corner (where Omarchy swaps a window that way). Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
 | `Super + Alt + arrows` | Move every sidebar against that screen edge, keeping their sizes (as the Dock gathers its windows on one edge) |
 | `Super + T` | Tile it: it leaves the sidebars and is a normal tiled window on the workspace on screen (`Super + Alt + B` makes it a sidebar again) |
@@ -111,14 +111,14 @@ return {
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
-  switcher = true,       -- false: Super + Up/Down cycle sidebars directly, without previews
+  switcher = true,       -- false: Super + B cycles sidebars directly, without previews
   floating_keys = false, -- true: Super + Shift/Alt + arrows also move/stretch floating windows (see below)
   convert_back = true,   -- false: the convert key only makes sidebars (leave one with Super + T)
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true,       -- Super + Escape hides it (false: it opens the system menu)
-    cycle = true,        -- Super + Left/Right reach a sidebar and back, Up/Down cycle them (false: Omarchy's focus)
+    cycle = true,        -- Super + Left/Right reach a sidebar and back (false: Omarchy's focus)
     theme = "SUPER + ALT + T", -- in a sidebar: pick a theme for that app's sidebars
     settings = "SUPER + ALT + S", -- in a sidebar: the settings panel
   },

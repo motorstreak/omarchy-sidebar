@@ -10,14 +10,13 @@
 --
 --   SUPER + ALT + B  the focused window becomes a sidebar (or a sidebar
 --                    becomes a normal window again)
---   SUPER + B        show the sidebar last shown, or hide the one showing
+--   SUPER + B        show the sidebar last shown; with one shown, the next one
+--                    (wrapping round; previews while SUPER is held), or with
+--                    only one, hide it
 --   SUPER + LEFT/RIGHT  between the windows and the sidebar, as between two
 --                    windows: from the last window before the screen edge
 --                    the sidebar used last is against, the arrow towards it
 --                    shows it; in it, the arrow away goes back (it hides)
---   SUPER + UP/DOWN  (a sidebar focused) the previous / next sidebar, in the
---                    order they were added, wrapping round; with previews
---                    while SUPER is held
 --
 -- Other plugins can add a kind of sidebar of their own (the Agent Sidebar
 -- plugin does, for its coding agent): see `sidebar.kinds` at the end.
@@ -122,7 +121,7 @@ local defaults = {
   -- short way in, so they don't show on that monitor. Hyprland's own show/hide
   -- animation becomes a fade (scratchpad too), as with `fade`.
   drawer = true,
-  -- With two or more sidebars, SUPER + UP/DOWN show live previews of them all in
+  -- With two or more sidebars, SUPER + B shows live previews of them all in
   -- the middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
   -- The switcher's look: "cards" (slanted, like Omarchy's background picker)
@@ -146,8 +145,8 @@ local defaults = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
     escape = true, -- SUPER + ESCAPE hides it (instead of opening the system menu)
-    -- SUPER + LEFT/RIGHT reach the sidebar from the windows and back, SUPER +
-    -- UP/DOWN (in one) the previous / next sidebar; false: Omarchy's focus keys
+    -- SUPER + LEFT/RIGHT reach the sidebar from the windows and back; false:
+    -- Omarchy's focus keys
     cycle = true,
     -- (a sidebar focused) pick an Omarchy theme for that app's sidebars: their
     -- border, and a terminal's colours
@@ -1775,9 +1774,8 @@ local function bind_sidebar_keys()
       o.bind(g[1], "All sidebars to the screen edge", guard(g[2], function()
         gather(direction)
       end))
-    elseif config.sidebar.cycle then
-      local what = ({ u = "Previous sidebar", d = "Next sidebar" })[direction] or "Back to the windows"
-      o.bind(g[1], what, guard(g[2], function()
+    elseif config.sidebar.cycle and (direction == "l" or direction == "r") then
+      o.bind(g[1], "Back to the windows", guard(g[2], function()
         sidebar_arrow(direction)
       end))
     else
@@ -2225,9 +2223,9 @@ end
 
 -- Switcher ----------------------------------------------------------------------
 
--- SUPER + an arrow with two or more sidebars opens the switcher: Service.qml draws a
+-- SUPER + B with a sidebar shown (and two or more) opens the switcher: Service.qml draws a
 -- live preview of each sidebar in the middle of the screen, one highlighted.
--- Each further arrow (SUPER still held) highlights the next or the one before; letting go of SUPER
+-- Each further B (SUPER still held) highlights the next; letting go of SUPER
 -- shows the highlighted one, and SUPER + ESCAPE closes it without a change.
 -- Every message carries the whole state and a sequence number, as each one is a
 -- separate process and they can arrive out of order. The numbers start again
@@ -2235,7 +2233,7 @@ end
 -- also carry an id for this load: the shell takes any message from a new one.
 --
 -- Letting go of SUPER is watched for by polling: a release binding on SUPER
--- only fires if SUPER was the last key pressed, and here an arrow came after it.
+-- only fires if SUPER was the last key pressed, and here B came after it.
 local SUPER_KEYS = { "Super_L", "Super_R" }
 local POLL_MS = 20
 local switcher = nil -- { windows, index, seq } while open
@@ -2356,9 +2354,13 @@ local function switcher_open(list, index)
   switcher_update()
 end
 
--- SUPER + B: hidden, the sidebar shown last comes back; shown, it hides.
+-- SUPER + B: hidden, the sidebar shown last comes back; shown, the next one
+-- (cycle: with SUPER held, the switcher, each further B moving along). A lone
+-- sidebar shown hides. SUPER + ESCAPE, a click outside or the arrow back to
+-- the windows hide one too.
 local function toggle()
   if switcher then
+    cycle(1)
     return
   end
   local list = sidebar_list()
@@ -2371,16 +2373,18 @@ local function toggle()
     return
   end
   local shown = shown_sidebar()
-  if shown then
+  if shown and #list > 1 then
+    cycle(1)
+  elseif shown then
     hide_shown()
   else
     show(last_sidebar(list))
   end
 end
 
--- SUPER + RIGHT/DOWN in a sidebar: the next one in the order they were added
--- (wrapping round), LEFT/UP the one before (`step` 1 or -1); with the
--- switcher, that's the one highlighted first. A lone sidebar stays.
+-- SUPER + B with a sidebar shown: the next one in the order they were added
+-- (wrapping round; `step` -1: the one before); with the switcher, that's the
+-- one highlighted first. A lone sidebar stays.
 function cycle(step)
   step = step or 1
   if switcher then
@@ -2408,14 +2412,10 @@ function cycle(step)
   end
 end
 
--- SUPER + arrows in a sidebar: UP / DOWN the previous / next sidebar (cycle);
--- the arrow pointing away from its screen edge goes back to the windows (it
--- hides, as on a click outside), the other does nothing.
+-- SUPER + LEFT/RIGHT in a sidebar: the arrow pointing away from its screen
+-- edge goes back to the windows (it hides, as on a click outside), the other
+-- does nothing. (UP/DOWN are Omarchy's focus; SUPER + B cycles sidebars.)
 function sidebar_arrow(direction)
-  if direction == "u" or direction == "d" then
-    cycle(direction == "u" and -1 or 1)
-    return
-  end
   local window = hl.get_active_window()
   if switcher or not is_member(window) or window.monitor == nil then
     return
