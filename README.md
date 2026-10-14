@@ -113,6 +113,7 @@ return {
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
   switcher = true,       -- false: Super + Up/Down cycle sidebars directly, without previews
   floating_keys = false, -- true: Super + Shift/Alt + arrows also move/stretch floating windows (see below)
+  convert_back = true,   -- false: the convert key only makes sidebars (leave one with Super + T)
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",

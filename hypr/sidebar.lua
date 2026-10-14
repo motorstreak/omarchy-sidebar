@@ -139,6 +139,9 @@ local defaults = {
   -- or height and back, and Omarchy's resize keys keep the edges it's against.
   -- Tiled windows keep Omarchy's swap and group keys.
   floating_keys = false,
+  -- The convert key on a sidebar makes it a normal window again; false: it
+  -- only ever makes one (leave with SUPER + T, or the Dock's key, instead).
+  convert_back = true,
   sidebar = {
     toggle = "SUPER + B",
     convert = "SUPER + ALT + B",
@@ -2480,14 +2483,17 @@ local function reset_window(window)
   end
 end
 
--- SUPER + ALT + B: the focused window becomes the sidebar, or the sidebar
--- becomes a normal window on the current workspace.
+-- SUPER + ALT + B: the focused window becomes the sidebar, or (with
+-- `convert_back`) the sidebar becomes a normal window on the current workspace.
 local function convert()
   local window = hl.get_active_window()
   if window == nil then
     return
   end
   if is_member(window) then
+    if not config.convert_back then
+      return
+    end
     local regular = regular_workspace(window.monitor)
     if regular then
       dispatch_for(window, hl.dsp.window.move, { workspace = workspace_target(regular.name) })
