@@ -2243,11 +2243,14 @@ local switcher_session = string.format("%d-%d", os.time(), math.random(1, 100000
 
 -- SUPER + T while the switcher is open swaps its look; Omarchy's floating
 -- toggle (default/hypr/bindings/tiling.lua) comes back when it closes. The look
--- chosen last is kept in switcher-style, over the `switcher_style` option.
+-- chosen last is kept in switcher-style, over the `switcher_style` option,
+-- with the option as it was then: once the option changes (in the settings
+-- panel), the option's look wins again.
 local STYLE_KEY = { "SUPER + T", "Toggle window floating/tiling" }
 local style_file = state_root .. "/switcher-style"
-local switcher_style = read_line(style_file)
-if switcher_style ~= "cards" and switcher_style ~= "coverflow" then
+local switcher_style, style_option = (read_line(style_file) or ""):match("^(%S+)%s*(%S*)")
+if (switcher_style ~= "cards" and switcher_style ~= "coverflow")
+    or style_option ~= config.switcher_style then
   switcher_style = config.switcher_style
 end
 
@@ -2345,7 +2348,7 @@ local function switcher_open(list, index)
       switcher_style = switcher_style == "coverflow" and "cards" or "coverflow"
       local f = io.open(style_file, "w")
       if f then
-        f:write(switcher_style, "\n")
+        f:write(switcher_style, " ", config.switcher_style, "\n")
         f:close()
       end
       switcher_update()
