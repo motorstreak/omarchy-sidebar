@@ -56,7 +56,7 @@ Scope {
     { look: true, key: "shadow", label: "Shadow", hint: "A large, faint shadow around sidebars (with the Dock, its glow)", type: "bool" },
     { key: "click_outside", label: "Click outside hides", hint: "A click outside the sidebar hides it", type: "bool" },
     { key: "switcher", label: "Switcher previews", hint: "Live previews while Super is held", type: "bool" },
-    { key: "switcher_style", label: "Preview style", hint: "Super + T swaps them while previews show", type: "enum", options: ["cards", "coverflow"] },
+    { key: "switcher_style", label: "Preview style", hint: "Super + T swaps them while previews show", type: "enum", options: ["cards", "coverflow"], needs: "switcher" },
     { key: "floating_keys", label: "Keys for floating windows", hint: "Super + Shift + arrows move, Super + Alt + arrows stretch any floating window", type: "bool" }
   ]
 
