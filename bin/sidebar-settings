@@ -15,7 +15,7 @@
 set -uo pipefail
 
 file=${SIDEBAR_CONFIG:-$HOME/.config/omarchy/sidebar.lua}
-allowed=" drawer fade dim width margin rounding border border_size border_opacity shadow click_outside switcher switcher_style floating_keys "
+allowed=" drawer fade dim width margin rounding border border_size border_opacity shadow click_outside switcher switcher_style floating_keys follow_theme "
 
 usage() {
   echo "Usage: sidebar-settings set KEY VALUE [KEY VALUE ...] | reset" >&2

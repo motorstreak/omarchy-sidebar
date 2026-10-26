@@ -132,6 +132,10 @@ local defaults = {
   -- sidebar presses this key to open it, instead of the sidebar's picker, and
   -- the sidebar leaves their colours alone. Add yours; false drops one.
   own_themes = { ["org.omarchy.cliamp"] = "T" }, -- cliamp: T, "Choose theme"
+  -- Every sidebar in the system theme (with the Window Style plugin, its
+  -- Sidebars theme): the themes picked per app are kept but not used, and
+  -- SUPER + ALT + T is left unbound.
+  follow_theme = false,
   -- Floating windows (not only sidebars, popped out ones too) get the
   -- sidebar's keys that Omarchy has no use for on them: SUPER + SHIFT + arrows
   -- move one against that screen edge, SUPER + ALT + arrows make it full width
@@ -1131,7 +1135,7 @@ local function theme_app(window)
   return class ~= "" and not class:find("/", 1, true) and class or nil
 end
 
-local function chosen_theme(window)
+local function saved_theme(window)
   local app = theme_app(window)
   local f = app and io.open(themes_root .. "/" .. app, "r")
   if not f then
@@ -1140,6 +1144,14 @@ local function chosen_theme(window)
   local name = (f:read("l") or ""):match("^[%w._-]+$")
   f:close()
   return name
+end
+
+-- The theme the window shows: none while sidebars follow the system theme.
+local function chosen_theme(window)
+  if config.follow_theme then
+    return nil
+  end
+  return saved_theme(window)
 end
 
 local function theme_colors_of(name)
@@ -1331,7 +1343,7 @@ local function leave(window)
   hide_if_empty(window.address)
   set_dim(window, false)
   unstyle(window)
-  if chosen_theme(window) then
+  if saved_theme(window) then
     theme_terminal(window, "restore")
   end
   -- Back to floating (centred) or tiled a moment later, not inside the event
@@ -1749,7 +1761,7 @@ local function bind_sidebar_keys()
     hl.unbind(FILL_KEY[1])
     o.bind(FILL_KEY[1], "Sidebar: tile it as a normal window", guard("tiling the sidebar", tile_out))
   end
-  if config.sidebar.theme then
+  if config.sidebar.theme and not config.follow_theme then
     hl.unbind(config.sidebar.theme)
     o.bind(config.sidebar.theme, "Sidebar theme", guard("picking a sidebar theme", pick_theme))
   end
@@ -1998,6 +2010,8 @@ do
     style(w)
     if chosen_theme(w) then
       theme_terminal(w, "apply")
+    elseif saved_theme(w) then
+      theme_terminal(w, "restore") -- following the system theme now
     end
     docked_on[w.address] = w.monitor and w.monitor.id
     if taken[w.workspace.name] then
@@ -2660,7 +2674,7 @@ sidebar = {
     for _, w in ipairs(sidebar_windows()) do
       if members[w.address] then
         style(w)
-        theme_terminal(w, "apply")
+        theme_terminal(w, chosen_theme(w) and "apply" or "restore")
       end
     end
   end,
@@ -2703,7 +2717,7 @@ sidebar = {
 -- flip, as they are now; bin/sidebar-settings writes a change into
 -- ~/.config/omarchy/sidebar.lua and reloads Hyprland, which loads them.
 local SETTINGS = { "drawer", "fade", "dim", "width", "margin", "rounding", "border", "border_size",
-  "border_opacity", "shadow", "click_outside", "switcher", "switcher_style", "floating_keys" }
+  "border_opacity", "shadow", "click_outside", "switcher", "switcher_style", "floating_keys", "follow_theme" }
 
 open_settings = function()
   local function encode(v)

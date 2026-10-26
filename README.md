@@ -113,6 +113,7 @@ return {
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
   switcher = true,       -- false: Super + B cycles sidebars directly, without previews
   floating_keys = false, -- true: Super + Shift/Alt + arrows also move/stretch floating windows (see below)
+  follow_theme = false,  -- true: every sidebar in the system theme; the per-app themes are set aside
   convert_back = true,   -- false: the convert key only makes sidebars (leave one with Super + T)
   sidebar = {
     toggle = "SUPER + B",
@@ -172,6 +173,12 @@ share one, any other window goes by its app), until you pick "Follow system them
 
 The plugin adds a hook, `~/.config/omarchy/hooks/theme-set.d/omarchy-sidebar-themes`,
 so a sidebar's theme survives Omarchy theme changes.
+
+To keep every sidebar in the system theme instead, turn on **Follow system
+theme** in the settings panel (`Super + Alt + S`), or set `follow_theme = true`.
+The themes picked per app are kept but set aside (their sidebars go back to the
+system theme's colours), and `Super + Alt + T` is left unbound. With the Window
+Style plugin, sidebars then take its Sidebars theme.
 
 ## Requirements
 
