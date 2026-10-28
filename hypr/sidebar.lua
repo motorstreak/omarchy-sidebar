@@ -1314,7 +1314,12 @@ local function unstyle(window)
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "border_size", value = "unset" })
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "rounding", value = "unset" })
   dispatch_for(window, hl.dsp.window.set_prop, { prop = "no_shadow", value = "unset" })
-  set_border(window, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
+  -- (With the Window Style plugin, its colours for the window's kind.)
+  if type(window_style) == "table" and window_style.adopt then
+    window_style.adopt(window)
+  else
+    set_border(window, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
+  end
   remember_restored(window.address)
 end
 
@@ -2076,7 +2081,10 @@ do
       -- Not one pinned since (the Dock plugin gives those their own border).
       if w and not in_sidebar(w) and not w.pinned and not keep[address] then
         keep[address] = true
-        set_border(w, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
+        -- (The Window Style plugin reads this list itself.)
+        if type(window_style) ~= "table" or not window_style.adopt then
+          set_border(w, theme_border("general:col.active_border"), theme_border("general:col.inactive_border"))
+        end
       end
     end
     f:close()
