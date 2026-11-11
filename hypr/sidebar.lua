@@ -486,6 +486,11 @@ local function workspace_target(name)
 end
 
 -- The regular workspace on screen (never a special one).
+-- The Window Style plugin's mode keys (its `mode_keys`) take SUPER + T over.
+local function fill_key_mine()
+  return not (type(window_style) == "table" and type(window_style.mode_keys) == "function" and window_style.mode_keys())
+end
+
 local function regular_workspace(monitor)
   monitor = monitor or hl.get_active_monitor()
   return monitor and monitor.active_workspace
@@ -1762,7 +1767,7 @@ local function bind_sidebar_keys()
       open_settings()
     end))
   end
-  if not switching then
+  if not switching and fill_key_mine() then
     hl.unbind(FILL_KEY[1])
     o.bind(FILL_KEY[1], "Sidebar: tile it as a normal window", guard("tiling the sidebar", tile_out))
   end
@@ -1873,7 +1878,7 @@ local function bind_omarchy_keys()
       o.bind(SCRATCH_KEY[1], SCRATCH_KEY[2], SCRATCH_KEY[3])
     end
   end
-  if not switching then
+  if not switching and fill_key_mine() then
     hl.unbind(FILL_KEY[1])
     o.bind(FILL_KEY[1], FILL_KEY[2], hl.dsp.window.float({ action = "toggle" }))
   end
