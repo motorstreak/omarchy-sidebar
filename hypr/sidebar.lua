@@ -1937,9 +1937,21 @@ local function hide_on_outside_click()
   -- background is a layer too, but below windows, so clicking it still hides.
   -- The Dock plugin's strips are layers too, invisible and taking no input,
   -- laid over the windows it pins: a click there is on the pinned window.
+  -- The shell draws its bar (and notifications) on see-through surfaces as tall
+  -- as the monitor, taking clicks only where something is drawn; of those only
+  -- the monitor's reserved edges (the bar itself) count as a click on them.
+  local m = window.monitor
+  local r = m.reserved or {}
+  local mw, mh = m.width / m.scale, m.height / m.scale
+  if (m.transform or 0) % 2 == 1 then
+    mw, mh = mh, mw
+  end
+  local in_reserved = p.x < m.x + (r.left or 0) or p.x >= m.x + mw - (r.right or 0)
+    or p.y < m.y + (r.top or 0) or p.y >= m.y + mh - (r.bottom or 0)
   for _, l in ipairs(hl.get_layers()) do
     if l.mapped and (l.layer or 0) >= 2 and l.namespace ~= "omarchy-dock-strip"
-        and p.x >= l.x and p.x < l.x + l.w and p.y >= l.y and p.y < l.y + l.h then
+        and p.x >= l.x and p.x < l.x + l.w and p.y >= l.y and p.y < l.y + l.h
+        and (l.h < mh - 1 or in_reserved) then
       return
     end
   end
