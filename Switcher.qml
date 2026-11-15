@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Shapes
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -364,8 +363,11 @@ Scope {
                     clip: true
                     layer.enabled: true
                     layer.smooth: true
-                    layer.effect: OpacityMask {
+                    layer.effect: MultiEffect {
+                      maskEnabled: true
                       maskSource: corners
+                      maskThresholdMin: 0.5
+                      maskSpreadAtMin: 1.0
                     }
 
                     Rectangle {
@@ -414,16 +416,20 @@ Scope {
                     id: fade
                     anchors.fill: parent
                     visible: false
+                    layer.enabled: true
                     gradient: Gradient {
                       GradientStop { position: 0.0; color: "transparent" }
                       GradientStop { position: 1.0; color: "white" }
                     }
                   }
 
-                  OpacityMask {
+                  MultiEffect {
                     anchors.fill: parent
                     source: mirror
+                    maskEnabled: true
                     maskSource: fade
+                    maskThresholdMin: 0.0
+                    maskSpreadAtMin: 1.0
                   }
                 }
               }
