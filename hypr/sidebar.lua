@@ -156,7 +156,7 @@ local defaults = {
     -- border, and a terminal's colours
     theme = "SUPER + ALT + T",
     -- (a sidebar focused) these settings in a panel, to flip them there
-    settings = "SUPER + SHIFT + ALT + S",
+    settings = "SUPER + ALT + E",
   },
 }
 
@@ -2738,7 +2738,7 @@ sidebar = {
 
 -- Settings panel ------------------------------------------------------------------
 
--- SUPER + SHIFT + ALT + S in a sidebar: SettingsPanel.qml lists the options it can
+-- SUPER + ALT + E in a sidebar: SettingsPanel.qml lists the options it can
 -- flip, as they are now; bin/sidebar-settings writes a change into
 -- ~/.config/omarchy/sidebar.lua and reloads Hyprland, which loads them.
 local SETTINGS = { "drawer", "fade", "dim", "width", "margin", "rounding", "border", "border_size",

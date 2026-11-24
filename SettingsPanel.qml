@@ -6,7 +6,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 
-// The sidebar settings (SUPER + SHIFT + ALT + S in a sidebar): the options worth
+// The sidebar settings (SUPER + ALT + E in a sidebar): the options worth
 // flipping, as they are now, in the look of Omarchy's menus. Up/Down pick one,
 // Left/Right (or Space/Enter, or a click) change it. Changes are saved a moment
 // after the last one by bin/sidebar-settings, into

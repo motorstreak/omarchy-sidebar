@@ -52,7 +52,7 @@ do on a docked window):
 |---|---|
 | `Super + Escape` or a click outside it | Hide it (the click still reaches what you clicked) |
 | `Super + Alt + T` | Pick an Omarchy theme for this app's sidebars (see [Sidebar themes](#sidebar-themes)) |
-| `Super + Shift + Alt + S` | The sidebar settings: flip the options below in a panel (`←`/`→` change one, `Esc` closes). Changes are saved into `~/.config/omarchy/sidebar.lua`, keeping your comments, and apply straight away. "Reset to defaults" at the bottom (press it twice) puts them all back, taking their lines out of the file |
+| `Super + Alt + E` | The sidebar settings: flip the options below in a panel (`←`/`→` change one, `Esc` closes). Changes are saved into `~/.config/omarchy/sidebar.lua`, keeping your comments, and apply straight away. "Reset to defaults" at the bottom (press it twice) puts them all back, taking their lines out of the file |
 | `Super + Left/Right` | Back to the windows with the arrow pointing away from the sidebar's screen edge (it hides). From the windows, the arrow towards a sidebar's edge, on the last window before it, shows it: the sidebar is reached as a window beside would be |
 | `Super + B` | The next sidebar. With two or more, keep `Super` held for live previews of them all in the middle of the screen: press `B` again to move along, let go of `Super` to show the highlighted one (`Super + Escape` cancels). A quick tap just shows it. With one sidebar, it hides |
 | `Super + Shift + arrows` | Move it against that screen edge, keeping its size; from there, the next arrow takes it into a corner (where Omarchy swaps a window that way). Where you leave it is remembered, separately for the agent (with the Agent Sidebar plugin) and other windows |
@@ -121,7 +121,7 @@ return {
     escape = true,       -- Super + Escape hides it (false: it opens the system menu)
     cycle = true,        -- Super + Left/Right reach a sidebar and back (false: Omarchy's focus)
     theme = "SUPER + ALT + T", -- in a sidebar: pick a theme for that app's sidebars
-    settings = "SUPER + SHIFT + ALT + S", -- in a sidebar: the settings panel
+    settings = "SUPER + ALT + E", -- in a sidebar: the settings panel
   },
 }
 ```
@@ -175,7 +175,7 @@ The plugin adds a hook, `~/.config/omarchy/hooks/theme-set.d/omarchy-sidebar-the
 so a sidebar's theme survives Omarchy theme changes.
 
 To keep every sidebar in the system theme instead, turn on **Follow system
-theme** in the settings panel (`Super + Shift + Alt + S`), or set `follow_theme = true`.
+theme** in the settings panel (`Super + Alt + E`), or set `follow_theme = true`.
 The themes picked per app are kept but set aside (their sidebars go back to the
 system theme's colours), and `Super + Alt + T` is left unbound. With the Window
 Style plugin, sidebars then take its Sidebars theme.
