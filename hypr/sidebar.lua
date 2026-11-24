@@ -156,7 +156,7 @@ local defaults = {
     -- border, and a terminal's colours
     theme = "SUPER + ALT + T",
     -- (a sidebar focused) these settings in a panel, to flip them there
-    settings = "SUPER + ALT + S",
+    settings = "SUPER + SHIFT + ALT + S",
   },
 }
 
@@ -199,7 +199,7 @@ local group_keys = {
   { "SUPER + ALT + DOWN", "Move window to group on bottom", "d", hl.dsp.window.move({ into_group = "d" }), true },
 }
 -- Omarchy's key for moving a window to the scratchpad: given back when the
--- settings key (by default the same) no longer has a sidebar to act on.
+-- settings key (if it's set to the same) no longer has a sidebar to act on.
 local SCRATCH_KEY = { "SUPER + ALT + S", "Move window to scratchpad",
   hl.dsp.window.move({ workspace = "special:scratchpad", follow = false }) }
 -- Omarchy's float/tile toggle; in the sidebar it tiles it, as a normal window
@@ -2738,7 +2738,7 @@ sidebar = {
 
 -- Settings panel ------------------------------------------------------------------
 
--- SUPER + ALT + S in a sidebar: SettingsPanel.qml lists the options it can
+-- SUPER + SHIFT + ALT + S in a sidebar: SettingsPanel.qml lists the options it can
 -- flip, as they are now; bin/sidebar-settings writes a change into
 -- ~/.config/omarchy/sidebar.lua and reloads Hyprland, which loads them.
 local SETTINGS = { "drawer", "fade", "dim", "width", "margin", "rounding", "border", "border_size",
