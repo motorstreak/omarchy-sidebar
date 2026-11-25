@@ -20,6 +20,8 @@
 #   sidebar-theme apply ADDRESS APP          the window's terminal in APP's theme
 #                                            (the current Omarchy theme if none)
 #   sidebar-theme restore ADDRESS APP        the window's terminal in the current theme
+#   sidebar-theme release ADDRESS APP        the window's terminal in its own colours
+#                                            (its config's), once out of the sidebars
 
 set -uo pipefail
 
@@ -28,7 +30,7 @@ themes=$state/omarchy-sidebar/themes
 current=$state/omarchy/current/theme/colors.toml
 omarchy_path=${OMARCHY_PATH:-/usr/share/omarchy}
 usage() {
-  echo "Usage: sidebar-theme list | preview|set ADDRESS APP [THEME] | cancel|apply|restore ADDRESS APP" >&2
+  echo "Usage: sidebar-theme list | preview|set ADDRESS APP [THEME] | cancel|apply|restore|release ADDRESS APP" >&2
   exit 1
 }
 
@@ -78,7 +80,35 @@ paint() {
   [[ -n $osc ]] && printf '%b' "$osc" >"$tty"
 }
 
+# The window's terminal program, by its process name ("foot", "ghostty"...).
+program_of() {
+  local pid
+  pid=$(hyprctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .pid')
+  [[ $pid =~ ^[0-9]+$ ]] && cat "/proc/$pid/comm" 2>/dev/null
+}
+
+# A window out of the sidebars: its terminal's own colours again. Colours set
+# here outlast the terminal's config, so a window left in them would keep
+# them through every later theme change. Reset (palette, text, background,
+# cursor), the terminal goes back to its config, which Omarchy keeps on the
+# current theme. Foot reads its config only at start, and Omarchy recolours
+# its windows on a theme change the way this does: it gets the current
+# theme's colours instead.
+release() {
+  local tty
+  if [[ $(program_of "$address") == foot ]]; then
+    paint "$current" now
+    return
+  fi
+  tty=$(terminal_of "$address")
+  [[ -n $tty && -w $tty ]] || return
+  printf '\033]104\007\033]110\007\033]111\007\033]112\007' >"$tty"
+}
+
 case $action in
+  release)
+    release
+    ;;
   apply)
     name=$(head -n1 "$themes/$app" 2>/dev/null)
     colors=$([[ -n $name ]] && colors_of "$name")

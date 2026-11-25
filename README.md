@@ -161,7 +161,10 @@ share one, any other window goes by its app), until you pick "Follow system them
 - A terminal sidebar (Foot, or any terminal running one process per window)
   also takes the theme's background, text and palette, set the way Omarchy
   sets every Foot terminal's on a theme change. When it stops being a sidebar
-  it goes back to the current theme's colours.
+  it goes back to the terminal's own colours (its config's, which Omarchy keeps
+  on the current theme), so it follows later theme changes like any other
+  window; a Foot terminal gets the current theme's, as Omarchy recolours Foot
+  itself.
 - An app that draws its own colours (a browser, say) only gets the border.
 - Claude Code in the Agent Sidebar uses its "ANSI colours only" theme, so all
   of it, accents included, follows the terminal's colours and changes the

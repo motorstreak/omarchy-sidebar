@@ -1216,7 +1216,8 @@ do
 end
 
 -- A terminal's colours follow its app's theme ("apply"), or go back to the
--- current one's ("restore"): bin/sidebar-theme writes them to its terminal.
+-- current one's ("restore"), while it's a sidebar; out of the sidebars, its
+-- own ("release"). bin/sidebar-theme writes them to its terminal.
 local function theme_terminal(window, action)
   local app = theme_app(window)
   if app then
@@ -1371,9 +1372,10 @@ local function leave(window)
   hide_if_empty(window.address)
   set_dim(window, false)
   unstyle(window)
-  if saved_theme(window) then
-    theme_terminal(window, "restore")
-  end
+  -- Its terminal's own colours again, whether it had a theme of its own or
+  -- followed the system's: colours set while it was a sidebar would outlast
+  -- the next theme change.
+  theme_terminal(window, "release")
   -- Back to floating (centred) or tiled a moment later, not inside the event
   -- that moved it out: that can come from a monitor being reconfigured, and
   -- Hyprland crashed centring a window then. Left be if it went back in.
