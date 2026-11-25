@@ -75,7 +75,13 @@ Item {
     stderr: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        if (text.trim() !== "") root.report(text.trim())
+        // Hyprland's warnings (lines starting "warning:") don't stop the
+        // load; only real errors are worth a notification.
+        var errors = text.trim().split("\n").filter(function(line) {
+          return line.trim() !== "" && line.trim().indexOf("warning:") !== 0
+        })
+        if (errors.length > 0) root.report(errors.join("\n"))
+        else if (text.trim() !== "") console.warn("sidebar: Hyprland warned while loading: " + text.trim())
       }
     }
     onExited: function() {

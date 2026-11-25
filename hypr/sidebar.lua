@@ -467,6 +467,12 @@ local function dispatch_for(window, dsp, args)
     if now == nil or not usable_monitor(now.monitor) then
       return
     end
+    -- Hyprland refuses to move or resize a fullscreen window (a sidebar
+    -- someone pressed SUPER + F in), with a warning that failed the whole
+    -- load on every config reload. Leave it be until it leaves fullscreen.
+    if now.fullscreen and now.fullscreen ~= 0 then
+      return
+    end
   end
   args.window = selector(window)
   hl.dispatch(dsp(args))
