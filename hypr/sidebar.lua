@@ -205,6 +205,18 @@ local SCRATCH_KEY = { "SUPER + ALT + S", "Move window to scratchpad",
 -- Omarchy's float/tile toggle; in the sidebar it tiles it, as a normal window
 -- (out of the sidebars), as it would a floating one.
 local FILL_KEY = { "SUPER + T", "Toggle window floating/tiling" }
+-- What SUPER + T does when no sidebar has it, and gets back: Omarchy's toggle,
+-- or what your Hyprland config puts in the global SIDEBAR_SUPER_T, as
+-- { description, function } (tiling every window on the workspace, say).
+local function fill_default()
+  local d = SIDEBAR_SUPER_T
+  if type(d) == "table" and type(d[1]) == "string" and type(d[2]) == "function" then
+    return d[1], d[2]
+  end
+  return FILL_KEY[2], function()
+    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+  end
+end
 
 -- Hides the focused sidebar. Omarchy binds it to the system menu
 -- (default/hypr/bindings/utilities.lua); that comes back whenever the sidebar
@@ -1652,11 +1664,12 @@ end
 
 -- SUPER + T in the sidebar: it tiles, as a normal window on the workspace on
 -- screen (out of the sidebars), as Omarchy's toggle tiles a floating window.
--- Any other window gets that toggle.
+-- Any other window gets what SUPER + T does outside the sidebars.
 local function tile_out()
   local window = hl.get_active_window()
   if not is_member(window) then
-    hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
+    local _, default = fill_default()
+    default()
     return
   end
   local regular = regular_workspace(window.monitor)
@@ -1886,7 +1899,8 @@ local function bind_omarchy_keys()
   end
   if not switching and fill_key_mine() then
     hl.unbind(FILL_KEY[1])
-    o.bind(FILL_KEY[1], FILL_KEY[2], hl.dsp.window.float({ action = "toggle" }))
+    local description, default = fill_default()
+    o.bind(FILL_KEY[1], description, guard("SUPER + T", default))
   end
   if config.sidebar.theme then
     hl.unbind(config.sidebar.theme)
