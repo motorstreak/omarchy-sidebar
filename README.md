@@ -111,6 +111,8 @@ return {
   click_outside = true,  -- clicking outside a sidebar hides it
   fade = false,          -- true: fade sidebars in and out instead of sliding (see below)
   drawer = true,         -- slide sidebars in from their screen edge and back out (see below)
+  side_slide = true,     -- without fade or drawer: the whole sidebar slides in from its edge (see below)
+  slide_speed = 4.5,     -- how long showing takes, in tenths of a second (Omarchy's: 3)
   switcher = true,       -- false: Super + B cycles sidebars directly, without previews
   floating_keys = false, -- true: Super + Shift/Alt + arrows also move/stretch floating windows (see below)
   follow_theme = false,  -- true: every sidebar in the system theme; the per-app themes are set aside
@@ -148,8 +150,19 @@ docked against, and back out to it when it hides, so it reads as a drawer
 rather than another window. It uses your window move animation, and turns the
 special workspace animation into a fade like `fade = true` (the scratchpad
 fades too). An edge with another monitor beyond it gets a short slide, so the
-sidebar doesn't show on that monitor on its way in. Set `drawer = false` for
-Omarchy's vertical slide.
+sidebar doesn't show on that monitor on its way in.
+
+With `drawer = false` (and no `fade`), `side_slide = true` slides the whole
+sidebar workspace in from the screen edge the sidebar is against and back out
+to it, taking `slide_speed` tenths of a second to show (a tenth less to hide).
+It needs no window move animation, so it also works where those are off (as
+on a slow VM). `side_slide = false` gives Omarchy's own slide, which drops in
+from the top.
+
+Omarchy's drop-down console (`Super + grave`) sets the show and hide
+animation of every special workspace. The plugin sets its own just before a
+sidebar shows or hides, and hands Omarchy's back once that's done, so the
+console still drops from the top.
 
 ## Sidebar themes
 

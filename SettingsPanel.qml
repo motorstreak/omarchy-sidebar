@@ -45,6 +45,8 @@ Scope {
   readonly property var allRows: [
     { key: "drawer", label: "Drawer slide", hint: "Slide in from the screen edge it's docked to", type: "bool" },
     { key: "fade", label: "Fade", hint: "Fade in and out instead of Omarchy's slide (without the drawer)", type: "bool" },
+    { key: "side_slide", label: "Slide from the side", hint: "Without drawer or fade: slide in from the screen edge, not from the top", type: "bool" },
+    { key: "slide_speed", label: "Slide time", hint: "How long showing takes; hiding is 100 ms quicker", type: "number", min: 1, max: 10, step: 0.5, unit: "ms", fallback: 4.5 },
     { look: true, key: "dim", label: "Dim behind", hint: "How much the rest of the screen dims", type: "number", min: 0, max: 1, step: 0.05, unit: "%", fallback: 0.55 },
     { key: "width", label: "Default width", hint: "A new sidebar's width, as a share of the screen", type: "number", min: 0.15, max: 0.9, step: 0.01, unit: "%", fallback: 0.33 },
     { look: true, key: "margin", label: "Margin", hint: "Gap to the screen edges and the bar", type: "number", min: 0, max: 120, step: 4, unit: "px", fallback: 32 },
@@ -94,6 +96,7 @@ Scope {
       return c ? c.label : String(v)
     }
     if (typeof v !== "number") return "Omarchy's"
+    if (row.unit === "ms") return Math.round(v * 100) + " ms"
     return row.unit === "%" ? Math.round(v * 100) + "%" : Math.round(v) + " px"
   }
 

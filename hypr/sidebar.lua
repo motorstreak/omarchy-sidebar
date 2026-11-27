@@ -121,6 +121,13 @@ local defaults = {
   -- short way in, so they don't show on that monitor. Hyprland's own show/hide
   -- animation becomes a fade (scratchpad too), as with `fade`.
   drawer = true,
+  -- Without `fade` or `drawer`: sidebars slide in from the screen edge they're
+  -- against and back out to it (the whole sidebar workspace slides, so it works
+  -- without window move animations); false: Omarchy's slide.
+  side_slide = true,
+  -- How fast sidebars show, in Hyprland's animation speed (tenths of a second;
+  -- Omarchy's is 3). Hiding takes a tenth of a second less.
+  slide_speed = 4.5,
   -- With two or more sidebars, SUPER + B shows live previews of them all in
   -- the middle of the screen while SUPER is held; false cycles them directly.
   switcher = true,
@@ -595,7 +602,60 @@ end
 local away, home = {}, {}
 local drawer_prepare, drawer_in, drawer_out, drawer_back, drawer_restore, drawer_settle
 
-local function toggle_special(name)
+-- Omarchy's show/hide animation for special workspaces (its drop-down console,
+-- default/hypr/qconsole.lua): its In and Out animations beat any
+-- specialWorkspace one, so the sidebar sets its own around each show or hide
+-- and hands Omarchy's back once it's done.
+local OMARCHY_IN = { leaf = "specialWorkspaceIn", enabled = true, speed = 3, bezier = "easeOutQuint", style = "slide top" }
+local OMARCHY_OUT = { leaf = "specialWorkspaceOut", enabled = true, speed = 2, bezier = "easeInOutCubic",
+  style = "slide bottom" }
+local animation_turn -- the latest show or hide that set the animation
+
+-- The screen edge a sidebar workspace's windows are nearer to.
+local function edge_of(name)
+  for _, w in ipairs(hl.get_workspace_windows(name) or {}) do
+    local m = w.monitor
+    if m and w.at and w.size then
+      local width = ((m.transform or 0) % 2 == 1 and m.height or m.width) / m.scale
+      return (w.at.x + w.size.x / 2 < m.x + width / 2) and "left" or "right"
+    end
+  end
+  return "right"
+end
+
+-- The sidebar's show/hide animation, or `false` for none (a show and hide at
+-- once); nil when Omarchy's is wanted.
+local function sidebar_animation(name, off)
+  local slow = config.slide_speed
+  if off then
+    hl.animation({ leaf = "specialWorkspaceIn", enabled = false })
+    hl.animation({ leaf = "specialWorkspaceOut", enabled = false })
+  elseif config.fade or config.drawer then
+    hl.animation({ leaf = "specialWorkspaceIn", enabled = true, speed = 3, bezier = "easeOutQuint", style = "fade" })
+    hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 3, bezier = "easeOutQuint", style = "fade" })
+  elseif config.side_slide then
+    -- The style names the edge the slide is measured from: "slide right" comes
+    -- in from the right, "slide left" goes out to the right.
+    local edge = edge_of(name)
+    hl.animation({ leaf = "specialWorkspaceIn", enabled = true, speed = slow, bezier = "easeOutQuint",
+      style = "slide " .. edge })
+    hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = math.max(1, slow - 1), bezier = "easeInOutCubic",
+      style = "slide " .. (edge == "right" and "left" or "right") })
+  else
+    return
+  end
+  local turn = {}
+  animation_turn = turn
+  hl.timer(guard("handing back Omarchy's animation", function()
+    if animation_turn == turn then
+      hl.animation(OMARCHY_IN)
+      hl.animation(OMARCHY_OUT)
+    end
+  end), { timeout = math.floor(math.max(slow, 3) * 100) + 150, type = "oneshot" })
+end
+
+local function toggle_special(name, instant)
+  sidebar_animation(name, instant)
   hl.dispatch(hl.dsp.workspace.toggle_special(name:sub(#"special:" + 1)))
 end
 
@@ -611,7 +671,7 @@ local function toggle_workspace(name, instant)
     else
       away[name] = nil
       dim_behind(false)
-      toggle_special(name)
+      toggle_special(name, instant)
       drawer_restore(name)
     end
     return
@@ -622,7 +682,7 @@ local function toggle_workspace(name, instant)
     drawer_settle(name)
   end
   local sliding = slide and drawer_prepare(name)
-  toggle_special(name)
+  toggle_special(name, instant)
   if sliding then
     drawer_in(sliding)
   end
@@ -663,16 +723,11 @@ local function redim(name)
     return
   end
   local focused = hl.get_active_window()
-  hl.animation({ leaf = "specialWorkspace", enabled = false })
   toggle_workspace(name, true)
   toggle_workspace(name, true)
   if focused and current(focused.address) then
     focus(current(focused.address))
   end
-  hl.timer(guard("restoring the sidebar animation", function()
-    hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3, bezier = "easeOutQuint",
-      style = (config.fade or config.drawer) and "fade" or "slidevert" })
-  end), { timeout = 100, type = "oneshot" })
 end
 
 -- Remembered places -----------------------------------------------------------
